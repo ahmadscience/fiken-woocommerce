@@ -150,32 +150,37 @@ if ( ! class_exists( 'FikenCustomer' ) ) {
         public static function getCustomerFromOrderWC($order)
         {
             $fikenCustomer = new FikenCustomer();
-            $fikenCustomer->setName($order->billing_first_name . " " . $order->billing_last_name);
-            $fikenCustomer->setEmail($order->billing_email);
+            $fikenCustomer->setName($order->get_billing_first_name() . " " . $order->get_billing_last_name());
+            $fikenCustomer->setEmail($order->get_billing_email());
 
-            if (isset($order->billing_company) && $order->billing_company) {
-                $fikenCustomer->setOrganizationIdentifier($order->billing_company);
+            $billing_company = $order->get_billing_company();
+            if ($billing_company) {
+                $fikenCustomer->setOrganizationIdentifier($billing_company);
             }
 
             $address = array();
 
-            if (isset($order->billing_postcode) && $order->billing_postcode) {
-                $address['postalCode'] = $order->billing_postcode;
+            $postcode = $order->get_billing_postcode();
+            if ($postcode) {
+                $address['postalCode'] = $postcode;
             }
-            if (isset($order->billing_city) && $order->billing_city) {
-                $address['postalPlace'] = $order->billing_city;
+            $city = $order->get_billing_city();
+            if ($city) {
+                $address['postalPlace'] = $city;
             }
-            if (isset($order->billing_address_1) && $order->billing_address_1) {
-                $address['address1'] = $order->billing_address_1;
+            $address1 = $order->get_billing_address_1();
+            if ($address1) {
+                $address['address1'] = $address1;
             }
-            if (isset($order->billing_address_2) && $order->billing_address_2) {
-                $address['address2'] = $order->billing_address_2;
+            $address2 = $order->get_billing_address_2();
+            if ($address2) {
+                $address['address2'] = $address2;
             }
-            if (isset($order->billing_country) && $order->billing_country) {
-                $full_country = (isset(WC()->countries->countries[$order->billing_country]))
-                    ? WC()->countries->countries[$order->billing_country]
-                    : $order->billing_country;
-                $address['country'] = $full_country;
+            $country_code = $order->get_billing_country();
+            if ($country_code) {
+                $address['country'] = isset(WC()->countries->countries[$country_code])
+                    ? WC()->countries->countries[$country_code]
+                    : $country_code;
             }
             if ($address) {
                 $fikenCustomer->setAddress($address);

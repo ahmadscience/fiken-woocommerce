@@ -19,30 +19,38 @@ if (!class_exists('FikenPDF')) {
             $items = $this->order->get_items();
             $data_list = array();
 
-            if (sizeof($items) > 0) {
+            if (count($items) > 0) {
                 foreach ($items as $item) {
+                    $qty = $item->get_quantity();
+                    $quantity_divider = ($qty == 0) ? 1 : $qty;
+
                     $data = array();
-                    $data['product_id'] = $item['product_id'];
-                    $data['variation_id'] = $item['variation_id'];
-                    $data['name'] = $item['name'];
-                    $data['quantity'] = $item['qty'];
-                    $quantity_divider = ($item['qty'] == 0) ? 1 : $item['qty'];
-                    $data['line_total'] = wc_price($item['line_total']);
-                    $data['single_line_total'] = wc_price($item['line_total'] / $quantity_divider);
-                    $data['line_tax'] = wc_price($item['line_tax']);
-                    $data['single_line_tax'] = wc_price($item['line_tax'] / $quantity_divider);
-                    $data['line_subtotal'] = wc_price($item['line_subtotal']);
-                    $data['line_subtotal_tax'] = wc_price($item['line_subtotal_tax']);
+                    $data['product_id'] = $item->get_product_id();
+                    $data['variation_id'] = $item->get_variation_id();
+                    $data['name'] = $item->get_name();
+                    $data['quantity'] = $qty;
+                    $data['line_total'] = wc_price($item->get_total());
+                    $data['single_line_total'] = wc_price($item->get_total() / $quantity_divider);
+                    $data['line_tax'] = wc_price($item->get_total_tax());
+                    $data['single_line_tax'] = wc_price($item->get_total_tax() / $quantity_divider);
+                    $data['line_subtotal'] = wc_price($item->get_subtotal());
+                    $data['line_subtotal_tax'] = wc_price($item->get_subtotal_tax());
                     $data['ex_price'] = $this->get_formatted_item_price($item, 'total', 'excl');
                     $data['price'] = $this->get_formatted_item_price($item, 'total');
                     $data['order_price'] = $this->order->get_formatted_line_subtotal($item);
                     $data['ex_single_price'] = $this->get_formatted_item_price($item, 'single', 'excl');
                     $data['single_price'] = $this->get_formatted_item_price($item, 'single');
-                    $meta = new WC_Order_Item_Meta($item['item_meta']);
-                    $data['meta'] = $meta->display(false, true);
+
+                    $meta_data = $item->get_formatted_meta_data('_', true);
+                    $meta_parts = array();
+                    foreach ($meta_data as $meta) {
+                        $meta_parts[] = wp_strip_all_tags($meta->display_key) . ': ' . wp_strip_all_tags($meta->display_value);
+                    }
+                    $data['meta'] = implode(', ', $meta_parts);
+
                     $data['item'] = $item;
                     $data['product'] = null;
-                    $product = $this->order->get_product_from_item($item);
+                    $product = $item->get_product();
                     if (!empty($product)) {
                         $data['sku'] = $product->get_sku();
                         $data['weight'] = $product->get_weight();
@@ -59,17 +67,13 @@ if (!class_exists('FikenPDF')) {
 
         private function get_formatted_item_price($item, $type, $tax_display = '')
         {
-            $item_price = 0;
-            $divider = ($type == 'single' && $item['qty'] != 0) ? $item['qty'] : 1;
-            if (!isset($item['line_subtotal']) || !isset($item['line_subtotal_tax']))
-                return;
+            $qty = $item->get_quantity();
+            $divider = ($type == 'single' && $qty != 0) ? $qty : 1;
 
             if ($tax_display == 'excl') {
-                $item_price = wc_price(($this->order->get_line_subtotal($item)) / $divider);
-            } else {
-                $item_price = wc_price(($this->order->get_line_subtotal($item, true)) / $divider);
+                return wc_price($this->order->get_line_subtotal($item) / $divider);
             }
-            return $item_price;
+            return wc_price($this->order->get_line_subtotal($item, true) / $divider);
         }
 
         private function get_order_totals()
@@ -87,17 +91,18 @@ if (!class_exists('FikenPDF')) {
         }
 
 
-        private function  getViewData()
+        private function getViewData()
         {
             $data = array();
             $invNumber = FikenProvider::getInvoiceNumber($this->order);
-            $data['invoice_number'] = !empty($invNumber) ? $invNumber :  $this->order->get_order_number();
-            $data['order_date'] = substr($this->order->order_date, 0, 10);
-            $data['payment_method'] = $this->order->payment_method_title;
+            $data['invoice_number'] = !empty($invNumber) ? $invNumber : $this->order->get_order_number();
+            $date_created = $this->order->get_date_created();
+            $data['order_date'] = $date_created ? $date_created->format('Y-m-d') : '';
+            $data['payment_method'] = $this->order->get_payment_method_title();
             $data['billing_address'] = $this->order->get_formatted_billing_address();
             $data['order_items'] = $this->get_order_items();
             $data['order_totals'] = $this->get_order_totals();
-            $data['shipping_notes'] = wpautop(wptexturize($this->order->customer_note));
+            $data['shipping_notes'] = wpautop(wptexturize($this->order->get_customer_note()));
             return $data;
         }
 

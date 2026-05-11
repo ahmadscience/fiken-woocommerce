@@ -66,16 +66,10 @@ if (!class_exists('FikenUtils')) {
         public static function log($mes, $title = '', $severity = self::LOG_LEVEL_INFO)
         {
             $debug_mode = get_option(self::CONF_FIKEN_DEBUG_MODE);
-	        if ($debug_mode || (int)$severity >= (int)self::DEFAULT_LOG_LEVEL) {
-		        if (version_compare(WC_VERSION, '3.0') < 0) {
-			        include_once FIKEN_PLUGIN_DIR . '../woocommerce/includes/class-wc-logger.php';
-			        $log = new WC_Logger();
-			        $log->add('fiken', $title . ' :: ' . $mes);
-		        } else {
-			        $logger = wc_get_logger();
-			        $logger->log('debug', $title . ' :: ' . $mes, array( 'source' => 'fiken' ));
-		        }
-	        }
+            if ($debug_mode || (int)$severity >= (int)self::DEFAULT_LOG_LEVEL) {
+                $logger = wc_get_logger();
+                $logger->log('debug', $title . ' :: ' . $mes, array('source' => 'fiken'));
+            }
         }
 
 
@@ -92,14 +86,64 @@ if (!class_exists('FikenUtils')) {
                 $passw = get_option(self::CONF_FIKEN_PASSW);
             }
 
-            $headers = $json ? array('Content-Type: application/json', 'Accept: application/hal+json, application/json') : array('Content-Type: multipart/form-data');
             global $wp_version;
-            array_push($headers, 'User-Agent: ' . 'fiken/' . self::FIKEN_VERSION . ' woocommerce/' . WC_VERSION . ' wordpress/' . $wp_version);
+            $user_agent = 'fiken/' . self::FIKEN_VERSION . ' woocommerce/' . WC_VERSION . ' wordpress/' . $wp_version;
             self::log($rel, 'CALL URI', self::LOG_LEVEL_INFO);
             if (isset($data) && $data) {
                 self::log($json ? json_encode($data) : var_export($data, true), 'CALL DATA', self::LOG_LEVEL_INFO);
             }
 
+            // Multipart file uploads use cURL directly since WP HTTP API doesn't support CURLFile
+            if (!$json) {
+                return self::callCurl($rel, $data, $login, $passw, $user_agent, $error);
+            }
+
+            $args = array(
+                'headers' => array(
+                    'Authorization' => 'Basic ' . base64_encode($login . ':' . $passw),
+                    'Content-Type'  => 'application/json',
+                    'Accept'        => 'application/hal+json, application/json',
+                    'User-Agent'    => $user_agent,
+                ),
+                'timeout'   => 50,
+                'sslverify' => true,
+            );
+
+            if (isset($data) && $data) {
+                $args['body']   = json_encode($data);
+                $args['method'] = 'POST';
+            } else {
+                $args['method'] = 'GET';
+            }
+
+            $response = wp_remote_request($rel, $args);
+
+            if (is_wp_error($response)) {
+                self::log($response->get_error_message(), 'WP HTTP ERROR', self::LOG_LEVEL_ERROR);
+                return false;
+            }
+
+            $http_code = wp_remote_retrieve_response_code($response);
+            $body      = wp_remote_retrieve_body($response);
+            $location  = wp_remote_retrieve_header($response, 'location');
+
+            $logbody = (strlen($body) > 256) ? substr($body, 0, 256) . ' ... ' : $body;
+            self::log($logbody, 'RESULT_BODY', self::LOG_LEVEL_INFO);
+
+            if (intval($http_code) > 300) {
+                self::log($http_code, 'HTTP status error code', self::LOG_LEVEL_ERROR);
+                $errMes = json_decode($body, true);
+                if (isset($errMes) && isset($errMes[0]['message'])) {
+                    $error = $errMes[0]['message'];
+                }
+                return false;
+            }
+
+            return array('location' => $location, 'body' => $body);
+        }
+
+        private static function callCurl($rel, $data, $login, $passw, $user_agent, &$error)
+        {
             $ch = curl_init();
 
             if (!$ch) {
@@ -108,48 +152,31 @@ if (!class_exists('FikenUtils')) {
             }
 
             @curl_setopt($ch, CURLOPT_URL, $rel);
-            @curl_setopt($ch, CURLOPT_USERPWD, $login . ":" . $passw);
-            @curl_setopt($ch, CURLOPT_HTTPHEADER, $headers);
+            @curl_setopt($ch, CURLOPT_USERPWD, $login . ':' . $passw);
+            @curl_setopt($ch, CURLOPT_HTTPHEADER, array('User-Agent: ' . $user_agent));
             @curl_setopt($ch, CURLOPT_HEADER, true);
             @curl_setopt($ch, CURLOPT_FRESH_CONNECT, true);
             @curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
             @curl_setopt($ch, CURLOPT_FORBID_REUSE, true);
             @curl_setopt($ch, CURLOPT_TIMEOUT, 50);
-            @curl_setopt($ch, CURLOPT_SSL_VERIFYPEER, false);
-            @curl_setopt($ch, CURLOPT_SSL_VERIFYHOST, false);
-
-            if (isset($data) && $data) {
-                @curl_setopt($ch, CURLOPT_POST, true);
-                @curl_setopt($ch, CURLOPT_POSTFIELDS, $json ? json_encode($data) : $data);
-            }
+            @curl_setopt($ch, CURLOPT_POST, true);
+            @curl_setopt($ch, CURLOPT_POSTFIELDS, $data);
 
             $result = curl_exec($ch);
-            $info = curl_getinfo($ch);
-
-            self::log(stripslashes(json_encode($info)), 'CURL_INFO', self::LOG_LEVEL_INFO);
+            $info   = curl_getinfo($ch);
 
             if ($result === false) {
-                $log_data = array(
-                    'curl_error' => curl_error($ch),
-                    'curl_errno' => curl_errno($ch)
-                );
+                $log_data = array('curl_error' => curl_error($ch), 'curl_errno' => curl_errno($ch));
                 curl_close($ch);
-                self::log(stripslashes(json_encode($log_data)), 'CURL FAILED', self::LOG_LEVEL_ERROR);
+                self::log(json_encode($log_data), 'CURL FAILED', self::LOG_LEVEL_ERROR);
                 return false;
             }
             curl_close($ch);
 
             $header = substr($result, 0, $info['header_size']);
-            $body = substr($result, $info['header_size']);
+            $body   = substr($result, $info['header_size']);
 
-            $bodyLen = strlen($body);
-            $logbody = $body;
-            if ($bodyLen > 256){
-                $logbody = substr($body, 0, 256) . ' ... ';
-            }
-
-            self::log($header, 'RESULT_HEADER', self::LOG_LEVEL_INFO);
-            self::log($logbody, 'RESULT_BODY', self::LOG_LEVEL_INFO);
+            self::log($body, 'RESULT_BODY', self::LOG_LEVEL_INFO);
 
             if (intval($info['http_code']) > 300) {
                 self::log($info['http_code'], 'HTTP status error code', self::LOG_LEVEL_ERROR);
@@ -159,6 +186,7 @@ if (!class_exists('FikenUtils')) {
                 }
                 return false;
             }
+
             return array('location' => self::getHeaderInfo('Location:', $header), 'body' => $body);
         }
 

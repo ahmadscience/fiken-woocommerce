@@ -209,14 +209,7 @@ if (!class_exists('FikenSale')) {
          */
         public function uploadAttachment($order)
         {
-            /**
-             * v 3.0 compatible
-             */
-            if (version_compare(WC_VERSION, '3.0') < 0) {
-                $wcOrderId = $order->id;
-            } else {
-                $wcOrderId = $order->get_id();
-            }
+            $wcOrderId = $order->get_id();
 
             $pdf = new FikenPDF($order);
             $target_path_base = wp_upload_dir();
@@ -273,18 +266,9 @@ if (!class_exists('FikenSale')) {
                     throw new Exception(sprintf(__('Order id: %s not found!', 'fiken'), $order_id));
                 }
 
-                /**
-                 * v 3.0 compatible
-                 */
-                if (version_compare(WC_VERSION, '3.0') < 0) {
-                    $wcOrderId = $order->id;
-                    $wcOrderPaymentMethod = $order->payment_method;
-                    $wcOrderPostStatus = $order->post_status;
-                } else {
-                    $wcOrderId = $order->get_id();
-                    $wcOrderPaymentMethod = $order->get_payment_method();
-                    $wcOrderPostStatus = get_post_status($order->get_id());
-                }
+                $wcOrderId = $order->get_id();
+                $wcOrderPaymentMethod = $order->get_payment_method();
+                $wcOrderPostStatus = get_post_status($wcOrderId);
 
                 //first time  -  status 1
                 if (!$ajax) {
@@ -360,18 +344,9 @@ if (!class_exists('FikenSale')) {
          */
         private static function registerSaleInner($order, $company, $payMethodCurrentSettings, &$resStatus)
         {
-            /**
-             * v 3.0 compatible
-             */
-            if (version_compare(WC_VERSION, '3.0') < 0) {
-                $wcOrderId = $order->id;
-                $wcOrderPaymentMethod = $order->payment_method;
-                $wcOrderDate = $order->order_date;
-            } else {
-                $wcOrderId = $order->get_id();
-                $wcOrderPaymentMethod = $order->get_payment_method();
-                $wcOrderDate = $order->get_date_created() ? gmdate( 'Y-m-d H:i:s', $order->get_date_created()->getOffsetTimestamp() ) : '';
-            }
+            $wcOrderId = $order->get_id();
+            $wcOrderPaymentMethod = $order->get_payment_method();
+            $wcOrderDate = $order->get_date_created() ? gmdate('Y-m-d H:i:s', $order->get_date_created()->getOffsetTimestamp()) : '';
 
             $order_products = $order->get_items();
 
@@ -580,7 +555,7 @@ if (!class_exists('FikenSale')) {
                 }
 
                 /** @var $fikenCustomer FikenCustomer */
-                $fikenCustomer = FikenCustomer::getCustomerFromFiken($order->billing_email, $company);
+                $fikenCustomer = FikenCustomer::getCustomerFromFiken($order->get_billing_email(), $company);
                 if ($fikenCustomer) {
                     $sale->setRelCustomer($fikenCustomer->getRelSelf());
                 } else {

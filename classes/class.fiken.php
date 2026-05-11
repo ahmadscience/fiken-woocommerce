@@ -43,7 +43,7 @@ if (!class_exists('Fiken')) {
                 wp_enqueue_style('fiken', FIKEN_PLUGIN_URL . 'views/css/fiken.css');
                 wp_enqueue_style('jquery_alerts', FIKEN_PLUGIN_URL . 'views/css/jquery_alerts.css');
                 wp_enqueue_script('jquery-ui-datepicker', array('jquery'));
-                wp_enqueue_style('jquery-style', 'http://ajax.googleapis.com/ajax/libs/jqueryui/1.8.2/themes/smoothness/jquery-ui.css');
+                wp_enqueue_style('jquery-ui-smoothness', 'https://ajax.googleapis.com/ajax/libs/jqueryui/1.13.2/themes/smoothness/jquery-ui.css');
                 wp_enqueue_script('fiken', FIKEN_PLUGIN_URL . 'views/js/fiken.js', array('jquery',), '', true);
                 wp_enqueue_script('jquery_alerts', FIKEN_PLUGIN_URL . 'views/js/jquery_alerts.js', array('jquery',), '', true);
             }

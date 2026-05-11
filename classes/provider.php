@@ -144,14 +144,7 @@ if (!class_exists('FikenProvider')) {
 
         public static function getInvoiceNumber($order)
         {
-            /**
-             * v 3.0 compatible
-             */
-            if (version_compare(WC_VERSION, '3.0') < 0) {
-                $wcOrderId = $order->id;
-            } else {
-                $wcOrderId = $order->get_id();
-            }
+            $wcOrderId = $order->get_id();
 
             $creditNote = get_post_meta($wcOrderId, '_wcpdf_credit_note_number', true);
             if (!empty($creditNote)) {
