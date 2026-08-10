@@ -1,6 +1,10 @@
 <?php
-if (!class_exists('FikenOrder')) {
 
+if (!defined('ABSPATH')) {
+    exit;
+}
+
+if (!class_exists('FikenOrder')) {
 
     class FikenOrder
     {
@@ -10,252 +14,209 @@ if (!class_exists('FikenOrder')) {
         public $lastUpdate;
         public $stateName;
 
-        function __construct($idOrder, $currentState, $mes = '', $stateName = '', $lastUpdate = '')
+        public function __construct($idOrder, $currentState, $mes = '', $stateName = '', $lastUpdate = '')
         {
             $this->currentState = $currentState;
-            $this->idOrder = $idOrder;
-            $this->lastUpdate = $lastUpdate;
-            $this->mes = $mes;
-            $this->stateName = $stateName;
+            $this->idOrder      = (int) $idOrder;
+            $this->lastUpdate   = $lastUpdate;
+            $this->mes          = $mes;
+            $this->stateName    = $stateName;
         }
 
-        /**
-         * @return mixed
-         */
-        public function getStateName()
-        {
-            return $this->stateName;
-        }
-
-        /**
-         * @return mixed
-         */
-        public function getCurrentState()
-        {
-            return $this->currentState;
-        }
-
-        /**
-         * @param mixed $currentState
-         */
-        public function setCurrentState($currentState)
-        {
-            $this->currentState = $currentState;
-        }
-
-        /**
-         * @return mixed
-         */
-        public function getIdOrder()
-        {
-            return $this->idOrder;
-        }
-
-        /**
-         * @param mixed $idOrder
-         */
-        public function setIdOrder($idOrder)
-        {
-            $this->idOrder = $idOrder;
-        }
-
-        /**
-         * @return mixed
-         */
-        public function getLastUpdate()
-        {
-            return $this->lastUpdate;
-        }
-
-        /**
-         * @param mixed $lastUpdate
-         */
-        public function setLastUpdate($lastUpdate)
-        {
-            $this->lastUpdate = $lastUpdate;
-        }
-
-        /**
-         * @return mixed
-         */
-        public function getMes()
-        {
-            return $this->mes;
-        }
-
-        /**
-         * @param mixed $mes
-         */
-        public function setMes($mes)
-        {
-            $this->mes = $mes;
-        }
-
+        public function getStateName()      { return $this->stateName; }
+        public function getCurrentState()   { return $this->currentState; }
+        public function setCurrentState($v) { $this->currentState = $v; }
+        public function getIdOrder()        { return $this->idOrder; }
+        public function setIdOrder($v)      { $this->idOrder = (int) $v; }
+        public function getLastUpdate()     { return $this->lastUpdate; }
+        public function setLastUpdate($v)   { $this->lastUpdate = $v; }
+        public function getMes()            { return $this->mes; }
+        public function setMes($v)          { $this->mes = $v; }
 
         public function asArray()
         {
             return array(
                 'currentState' => $this->getCurrentState(),
-                'idOrder' => $this->getIdOrder(),
-                'mes' => $this->getMes(),
-                'stateName' => $this->getStateName(),
-                'lastUpdate' => $this->getLastUpdate()
+                'idOrder'      => $this->getIdOrder(),
+                'mes'          => $this->getMes(),
+                'stateName'    => $this->getStateName(),
+                'lastUpdate'   => $this->getLastUpdate(),
             );
         }
-
 
         public function update()
         {
             global $wpdb;
-            if ($this->getIdOrder()) {
-                if ($wpdb->get_var("SELECT `id_order` FROM `{$wpdb->prefix}fiken_orders` WHERE `id_order` = " . (intval($this->getIdOrder())))) {
-                    $wpdb->query("UPDATE `{$wpdb->prefix}fiken_orders` SET `current_state` = " . intval($this->getCurrentState()) . ", mes = '" . $wpdb->_escape($this->getMes()) . "', `last_update` = NOW() WHERE `id_order` = " . intval($this->getIdOrder()));
-                } else {
-                    $wpdb->query("INSERT INTO `{$wpdb->prefix}fiken_orders` (`id_order`, `current_state`, `mes`, `last_update`)
-                                            VALUES(" . intval($this->getIdOrder()) . ", " . intval($this->getCurrentState()) . ", '" . $wpdb->_escape($this->getMes()) . "', NOW())");
-                }
-                $wpdb->query("INSERT INTO `{$wpdb->prefix}fiken_order_history` (`id_order`, `id_state`, `mes`, `last_update`)
-                                            VALUES(" . intval($this->getIdOrder()) . ", " . intval($this->getCurrentState()) . ", '" . $wpdb->_escape($this->getMes()) . "', NOW())");
+            $id = (int) $this->getIdOrder();
+            if (!$id) { return; }
+            $exists = $wpdb->get_var($wpdb->prepare(
+                "SELECT id_order FROM {$wpdb->prefix}fiken_orders WHERE id_order = %d",
+                $id
+            ));
+            if ($exists) {
+                $wpdb->update(
+                    "{$wpdb->prefix}fiken_orders",
+                    array(
+                        'current_state' => (int) $this->getCurrentState(),
+                        'mes'           => (string) $this->getMes(),
+                        'last_update'   => current_time('mysql'),
+                    ),
+                    array('id_order' => $id),
+                    array('%d', '%s', '%s'),
+                    array('%d')
+                );
+            } else {
+                $wpdb->insert(
+                    "{$wpdb->prefix}fiken_orders",
+                    array(
+                        'id_order'      => $id,
+                        'current_state' => (int) $this->getCurrentState(),
+                        'mes'           => (string) $this->getMes(),
+                        'last_update'   => current_time('mysql'),
+                    ),
+                    array('%d', '%d', '%s', '%s')
+                );
             }
+            $wpdb->insert(
+                "{$wpdb->prefix}fiken_order_history",
+                array(
+                    'id_order'    => $id,
+                    'id_state'    => (int) $this->getCurrentState(),
+                    'mes'         => (string) $this->getMes(),
+                    'last_update' => current_time('mysql'),
+                ),
+                array('%d', '%d', '%s', '%s')
+            );
         }
-
-        /**
-         * @param $idOrder
-         * @return bool|FikenOrder
-         */
 
         public static function getFikenOrderById($idOrder)
         {
             global $wpdb;
-            $res = false;
-            $sql = "SELECT fo.`id_order`, fo.`current_state`, fo.`mes`, fo.`last_update`
-                    ,(select fs.`name` FROM `{$wpdb->prefix}fiken_states` as fs WHERE fo.`current_state` = fs.`id_state`) as state_name
-                    FROM  `{$wpdb->prefix}fiken_orders` fo
-                    WHERE fo.`id_order` = " . intval($idOrder);
-            $result = $wpdb->get_row($sql, ARRAY_A);
-
-            if ($result) {
-                $res = new FikenOrder($result['id_order'], $result['current_state'], $result['mes'], $result['state_name'], $result['last_update']);
-            }
-            return $res;
+            $id = (int) $idOrder;
+            if (!$id) { return false; }
+            $row = $wpdb->get_row($wpdb->prepare(
+                "SELECT fo.id_order, fo.current_state, fo.mes, fo.last_update, fs.name AS state_name
+                 FROM {$wpdb->prefix}fiken_orders fo
+                 LEFT JOIN {$wpdb->prefix}fiken_states fs ON fo.current_state = fs.id_state
+                 WHERE fo.id_order = %d",
+                $id
+            ), ARRAY_A);
+            if (!$row) { return false; }
+            return new FikenOrder(
+                $row['id_order'], $row['current_state'],
+                (string) $row['mes'], (string) $row['state_name'], (string) $row['last_update']
+            );
         }
 
-        /**
-         * @param $idOrder
-         * @return FikenOrder[]|bool
-         * @throws PrestaShopDatabaseException
-         */
         public static function getFikenOrderHistoryById($idOrder)
         {
             global $wpdb;
-            $res = false;
-            $sql = "SELECT foh.`id_order`, foh.`id_state`, foh.`mes`, foh.`last_update`, foh.last_update
-                  ,(select fs.`name` FROM `{$wpdb->prefix}fiken_states` as fs WHERE foh.`id_state` = fs.`id_state`) as state_name
-                  FROM  `{$wpdb->prefix}fiken_order_history` foh
-                  WHERE foh.`id_order` = " . intval($idOrder) .
-                " ORDER BY foh.`id_history` ";
-
-            $result = $wpdb->get_results($sql, ARRAY_A);
-            if (count($result)) {
-                foreach ($result as $item) {
-                    $res[] = new FikenOrder($item['id_order'], $item['id_state'], $item['mes'], $item['state_name'], $item['last_update']);
-                }
+            $id = (int) $idOrder;
+            if (!$id) { return array(); }
+            $rows = $wpdb->get_results($wpdb->prepare(
+                "SELECT foh.id_order, foh.id_state, foh.mes, foh.last_update, fs.name AS state_name
+                 FROM {$wpdb->prefix}fiken_order_history foh
+                 LEFT JOIN {$wpdb->prefix}fiken_states fs ON foh.id_state = fs.id_state
+                 WHERE foh.id_order = %d
+                 ORDER BY foh.id_history ASC",
+                $id
+            ), ARRAY_A);
+            $res = array();
+            foreach ((array) $rows as $item) {
+                $res[] = new FikenOrder(
+                    $item['id_order'], $item['id_state'],
+                    (string) $item['mes'], (string) $item['state_name'], (string) $item['last_update']
+                );
             }
             return $res;
         }
 
-        public static function getOrdersWC($data = array())
+        public static function getPaginatedOrders(array $args)
         {
-            global $wpdb;
+            $wc_args = array(
+                'type'     => 'shop_order',
+                'limit'    => isset($args['limit']) ? (int) $args['limit'] : 20,
+                'page'     => isset($args['page'])  ? max(1, (int) $args['page']) : 1,
+                'paginate' => true,
+                'order'    => isset($args['asc_desc']) && strtoupper($args['asc_desc']) === 'ASC' ? 'ASC' : 'DESC',
+                'orderby'  => self::mapOrderBy(isset($args['sort']) ? $args['sort'] : ''),
+            );
 
-            $sql = "SELECT posts.`id` as id_order,  posts.`post_date` as date_add, posts.`post_modified` as date_upd
-                ,fo.`current_state`
-                ,(SELECT fs.`name` FROM `{$wpdb->prefix}fiken_states` fs  where fs.`id_state` = fo.`current_state`) as status_name_fiken
-                ,(SELECT `meta_value` FROM `{$wpdb->prefix}postmeta` AS meta where posts.`ID` = meta.`post_id` and `meta_key` = '_order_total') as total_paid
-                ,(SELECT group_concat(`meta_value` SEPARATOR ' ') FROM `{$wpdb->prefix}postmeta` AS meta where posts.`ID` = meta.`post_id` and `meta_key` in ('_billing_first_name', '_billing_last_name' )) as customer
-                FROM `{$wpdb->prefix}fiken_orders` fo
-                INNER JOIN `{$wpdb->prefix}posts` AS posts ON (posts.`id` = fo.`id_order`)
-                WHERE posts.`post_type` = 'shop_order'";
-
-            //only statuses from settings
-            $impl = array();
-            $statates = FikenUtils::getStatesFromSettings();
-
-            if ($statates) {
-                foreach ($statates as $st) {
-                    $impl[] = "posts.`post_status` = '" . $wpdb->_escape($st) . "'";
-                }
-                $sql .= " AND (" . implode(" OR ", $impl) . ") ";
+            $configuredStatuses = FikenUtils::getStatesFromSettings();
+            if (!empty($configuredStatuses)) {
+                $wc_args['status'] = array_map(function ($s) {
+                    return strpos($s, 'wc-') === 0 ? substr($s, 3) : $s;
+                }, $configuredStatuses);
             }
 
-            if (isset($data['filter_date_start']) && $data['filter_date_start']) {
-                $sql .= " AND DATE(posts.`post_date`) >= '" . $wpdb->_escape($data['filter_date_start']) . "'";
-            }
-            if (isset($data['filter_date_end']) && $data['filter_date_end']) {
-                $sql .= " AND DATE(posts.`post_modified`) <= '" . $wpdb->_escape($data['filter_date_end']) . "'";
+            $dateStart = !empty($args['filter_date_start']) ? $args['filter_date_start'] : '';
+            $dateEnd   = !empty($args['filter_date_end'])   ? $args['filter_date_end']   : '';
+            if ($dateStart && $dateEnd)  { $wc_args['date_created'] = $dateStart . '...' . $dateEnd; }
+            elseif ($dateStart)          { $wc_args['date_created'] = '>=' . $dateStart; }
+            elseif ($dateEnd)            { $wc_args['date_created'] = '<=' . $dateEnd; }
+
+            $result = wc_get_orders($wc_args);
+            $orders = isset($result->orders) ? $result->orders : array();
+            $total  = isset($result->total)  ? (int) $result->total : count($orders);
+
+            $ids = array_map(function ($o) { return (int) $o->get_id(); }, $orders);
+            $states = $ids ? self::fetchStates($ids) : array();
+
+            $filterFikenState = isset($args['filter_order_status_id']) ? (int) $args['filter_order_status_id'] : 0;
+
+            $rows = array();
+            foreach ($orders as $order) {
+                $id = (int) $order->get_id();
+                $s  = isset($states[$id]) ? $states[$id] : array('current_state' => 1, 'state_name' => __('Not transferred', 'fiken'));
+                if ($filterFikenState && (int) $s['current_state'] !== $filterFikenState) { continue; }
+                $created  = $order->get_date_created();
+                $modified = $order->get_date_modified();
+                $customer = trim($order->get_billing_first_name() . ' ' . $order->get_billing_last_name());
+                if ($customer === '') { $customer = $order->get_billing_email(); }
+                $rows[] = array(
+                    'id_order'          => $id,
+                    'current_state'     => (int) $s['current_state'],
+                    'status_name_fiken' => (string) $s['state_name'],
+                    'customer'          => $customer,
+                    'total_paid'        => (float) $order->get_total(),
+                    'date_add'          => $created  ? $created->date('Y-m-d')  : '',
+                    'date_upd'          => $modified ? $modified->date('Y-m-d') : '',
+                );
             }
 
-            if (isset($data['filter_order_status_id']) && $data['filter_order_status_id']) {
-                $sql .= " and  fo.`current_state` = '" . (int)$data['filter_order_status_id'] . "'";
-            }
-
-            $sql .= " ORDER BY ";
-
-            if (isset($data['sort']) && $data['sort']) {
-                $sql .= $wpdb->_escape($data['sort']);
-            } else {
-                $sql .= " posts.`id` ";
-            }
-
-            if (isset($data['asc_desc']) && $data['asc_desc']) {
-                $sql .= " " . $wpdb->_escape($data['asc_desc']) . " ";
-            }
-
-            if ((isset($data['start']) && $data['start']) || (isset($data['limit']) && $data['limit'])) {
-                if (intval($data['start']) < 0) {
-                    $data['start'] = 0;
-                }
-                if (intval($data['limit']) < 1) {
-                    $data['limit'] = 20;
-                }
-                $sql .= " LIMIT " . (int)$data['start'] . "," . (int)$data['limit'];
-            }
-            return $wpdb->get_results($sql, ARRAY_A);
+            return array('orders' => $rows, 'total' => $total);
         }
 
-
-        public static function getTotalOrdersWC($data = array())
+        private static function fetchStates(array $ids)
         {
             global $wpdb;
-
-            $sql = "SELECT count(posts.`id`) as cnt
-                FROM `{$wpdb->prefix}posts` AS posts
-                INNER JOIN `{$wpdb->prefix}fiken_orders` fo ON (posts.`id` = fo.`id_order`)
-                WHERE posts.`post_type` = 'shop_order'";
-
-            //only statuses from settings
-            $impl = array();
-            $statates = FikenUtils::getStatesFromSettings();
-
-            if ($statates) {
-                foreach ($statates as $st) {
-                    $impl[] = "posts.`post_status` = '" . $wpdb->_escape($st) . "'";
-                }
-                $sql .= " and (" . implode(" OR ", $impl) . ") ";
+            $ids = array_filter(array_map('intval', $ids));
+            if (empty($ids)) { return array(); }
+            $placeholders = implode(',', array_fill(0, count($ids), '%d'));
+            $sql = "SELECT fo.id_order, fo.current_state, fs.name AS state_name
+                    FROM {$wpdb->prefix}fiken_orders fo
+                    LEFT JOIN {$wpdb->prefix}fiken_states fs ON fo.current_state = fs.id_state
+                    WHERE fo.id_order IN ($placeholders)";
+            $rows = $wpdb->get_results($wpdb->prepare($sql, $ids), ARRAY_A);
+            $out  = array();
+            foreach ((array) $rows as $r) {
+                $out[(int) $r['id_order']] = array(
+                    'current_state' => (int) $r['current_state'],
+                    'state_name'    => (string) $r['state_name'],
+                );
             }
+            return $out;
+        }
 
-            if (isset($data['filter_date_start']) && $data['filter_date_start']) {
-                $sql .= " AND DATE(posts.`post_date`) >= '" . $wpdb->_escape($data['filter_date_start']) . "'";
-            }
-            if (isset($data['filter_date_end']) && $data['filter_date_end']) {
-                $sql .= " AND DATE(posts.`post_modified`) <= '" . $wpdb->_escape($data['filter_date_end']) . "'";
-            }
-
-            if (isset($data['filter_order_status_id']) && $data['filter_order_status_id']) {
-                $sql .= " and  fo.`current_state` = '" . (int)$data['filter_order_status_id'] . "'";
-            }
-
-            return $wpdb->get_var($sql);
+        private static function mapOrderBy($sort)
+        {
+            $map = array(
+                'id' => 'date', 'date_add' => 'date', 'date_created' => 'date',
+                'date_upd' => 'modified', 'date_modified' => 'modified',
+                'total' => 'total', 'total_paid' => 'total',
+            );
+            $sort = strtolower((string) $sort);
+            return isset($map[$sort]) ? $map[$sort] : 'date';
         }
     }
 }

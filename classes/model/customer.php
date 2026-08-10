@@ -1,211 +1,108 @@
 <?php
 
-if ( ! class_exists( 'FikenCustomer' ) ) {
+if (!defined('ABSPATH')) {
+    exit;
+}
+
+if (!class_exists('FikenCustomer')) {
 
     include_once FIKEN_PLUGIN_DIR . 'classes/model/fiken_model.php';
+    include_once FIKEN_PLUGIN_DIR . 'classes/api/client.php';
 
     class FikenCustomer extends FikenModel
     {
+        public $contactId = 0;
+        public $email = '';
+        public $name = '';
+        public $address = array();
+        public $organizationNumber = '';
+        public $customer = true;
 
-        public $relSelf;
-        public $email;
-        public $name;
-        /**
-         * @var $address array
-         */
-        public $address;
-        public $organizationIdentifier;
-        public $customer = true; //needed for fiken serv
-
-        function __construct($relSelf = '', $name = '', $email = '', $address = array(), $organizationIdentifier = '')
+        public function __construct($contactId = 0, $name = '', $email = '', array $address = array(), $organizationNumber = '')
         {
-            $this->name = $name;
-            $this->email = $email;
-            $this->relSelf = $relSelf;
-            $this->address = $address;
-            $this->organizationIdentifier = $organizationIdentifier;
+            $this->contactId          = (int) $contactId;
+            $this->name               = (string) $name;
+            $this->email              = (string) $email;
+            $this->address            = $address;
+            $this->organizationNumber = (string) $organizationNumber;
         }
 
-
-        /**
-         * @param array $address
-         */
-        public function setAddress($address)
-        {
-            $this->address = $address;
-        }
-
-        /**
-         * @return array
-         */
-        public function getAddress()
-        {
-            return $this->address;
-        }
-
-        /**
-         * @param mixed $name
-         */
-        public function setName($name)
-        {
-            $this->name = $name;
-        }
-
-        /**
-         * @return mixed
-         */
-        public function getName()
-        {
-            return $this->name;
-        }
-
-        /**
-         * @return mixed
-         */
-        public function getEmail()
-        {
-            return $this->email;
-        }
-
-        /**
-         * @param mixed $email
-         */
-        public function setEmail($email)
-        {
-            $this->email = $email;
-        }
-
-
-        /**
-         * @param mixed $relSelf
-         */
-        public function setRelSelf($relSelf)
-        {
-            $this->relSelf = $relSelf;
-        }
-
-        /**
-         * @return mixed
-         */
-        public function getRelSelf()
-        {
-            return $this->relSelf;
-        }
-
-        /**
-         * @return mixed
-         */
-        public function getOrganizationIdentifier()
-        {
-            return $this->organizationIdentifier;
-        }
-
-        /**
-         * @param mixed $organizationIdentifier
-         */
-        public function setOrganizationIdentifier($organizationIdentifier)
-        {
-            $this->organizationIdentifier = $organizationIdentifier;
-        }
+        public function getContactId()            { return $this->contactId; }
+        public function setContactId($v)          { $this->contactId = (int) $v; }
+        public function getName()                 { return $this->name; }
+        public function setName($v)               { $this->name = (string) $v; }
+        public function getEmail()                { return $this->email; }
+        public function setEmail($v)              { $this->email = (string) $v; }
+        public function getAddress()              { return $this->address; }
+        public function setAddress(array $v)      { $this->address = $v; }
+        public function getOrganizationNumber()   { return $this->organizationNumber; }
+        public function setOrganizationNumber($v) { $this->organizationNumber = (string) $v; }
 
         protected function getDef()
         {
-            return array('name', 'email', 'address', 'organizationIdentifier', 'customer');
+            return array('name', 'email', 'address', 'organizationNumber', 'customer');
         }
 
-        /**
-         * @param $email
-         * @param $company FikenCompany
-         * @return FikenCustomer|bool
-         */
-        public static function getCustomerFromFiken($email, $company)
+        public static function getCustomerFromFiken($email, FikenCompany $company)
         {
-            /** @var $res FikenCustomer|bool */
-            $res = false;
-            $result = FikenUtils::call($company->getRelContacts());
-            if (isset($result['body']) && $result['body']) {
-                $hal = FikenHal::fromJson($result['body'], 1);
-                $resources = $hal->getResources();
-                if (isset($resources) && $resources) {
-                    if (array_key_exists(FikenUtils::FIKEN_BASE_URL . "/rel/contacts", $resources)) {
-                        $contacts = $resources[FikenUtils::FIKEN_BASE_URL . "/rel/contacts"];
-                        foreach ($contacts as $contact) {
-                            $data = $contact->getData();
-                            if (array_key_exists('email', $data) && strtoupper($data['email']) == strtoupper($email)) {
-                                $res = new FikenCustomer($contact->getUri(), $data['name'], $data['email'], $data['address'], '');
-                            }
-                        }
-                    }
+            if (empty($email) || empty($company->getSlug())) { return false; }
+            $client = new FikenApiClient();
+            $r = $client->getContactByEmail($company->getSlug(), $email);
+            if (!$r['ok'] || !is_array($r['body'])) { return false; }
+            foreach ($r['body'] as $row) {
+                if (!is_array($row) || empty($row['email'])) { continue; }
+                if (strcasecmp($row['email'], $email) === 0) {
+                    $id = isset($row['contactId']) ? (int) $row['contactId'] : 0;
+                    return new self(
+                        $id,
+                        isset($row['name']) ? $row['name'] : '',
+                        $row['email'],
+                        isset($row['address']) && is_array($row['address']) ? $row['address'] : array(),
+                        isset($row['organizationNumber']) ? $row['organizationNumber'] : ''
+                    );
                 }
             }
-            return $res;
+            return false;
         }
-
-
-        /**
-         * @param $order_info
-         * @return FikenCustomer
-         */
 
         public static function getCustomerFromOrderWC($order)
         {
-            $fikenCustomer = new FikenCustomer();
-            $fikenCustomer->setName($order->get_billing_first_name() . " " . $order->get_billing_last_name());
-            $fikenCustomer->setEmail($order->get_billing_email());
+            $c = new self();
+            $c->setName(trim($order->get_billing_first_name() . ' ' . $order->get_billing_last_name()));
+            $c->setEmail($order->get_billing_email());
 
-            $billing_company = $order->get_billing_company();
-            if ($billing_company) {
-                $fikenCustomer->setOrganizationIdentifier($billing_company);
+            if ($order->get_billing_company()) {
+                $c->setOrganizationNumber($order->get_billing_company());
             }
 
             $address = array();
-
-            $postcode = $order->get_billing_postcode();
-            if ($postcode) {
-                $address['postalCode'] = $postcode;
+            $street  = trim($order->get_billing_address_1() . ' ' . $order->get_billing_address_2());
+            if ($street !== '') { $address['streetAddress'] = $street; }
+            if ($order->get_billing_postcode()) { $address['postalCode'] = $order->get_billing_postcode(); }
+            if ($order->get_billing_city())     { $address['city']       = $order->get_billing_city(); }
+            $country = $order->get_billing_country();
+            if ($country) {
+                $address['country'] = isset(WC()->countries->countries[$country])
+                    ? WC()->countries->countries[$country]
+                    : $country;
             }
-            $city = $order->get_billing_city();
-            if ($city) {
-                $address['postalPlace'] = $city;
-            }
-            $address1 = $order->get_billing_address_1();
-            if ($address1) {
-                $address['address1'] = $address1;
-            }
-            $address2 = $order->get_billing_address_2();
-            if ($address2) {
-                $address['address2'] = $address2;
-            }
-            $country_code = $order->get_billing_country();
-            if ($country_code) {
-                $address['country'] = isset(WC()->countries->countries[$country_code])
-                    ? WC()->countries->countries[$country_code]
-                    : $country_code;
-            }
-            if ($address) {
-                $fikenCustomer->setAddress($address);
-            }
-            return $fikenCustomer;
+            if (!empty($address)) { $c->setAddress($address); }
+            return $c;
         }
 
-        /**
-         * @param $company
-         * @param $idOrder
-         * @return mixed  (location url)
-         * @throws Exception
-         */
-        public function register($company, $idOrder)
+        public function register(FikenCompany $company, $wcOrderId)
         {
-            if (!$this->getName() || !$this->getEmail()) {
-                throw new Exception(sprintf(__('Customer name or email not set for order id: %s !', 'fiken'), $idOrder));
+            if (empty($this->getName()) || empty($this->getEmail())) {
+                throw new Exception(sprintf(__('Customer name or email not set for order id: %s !', 'fiken'), $wcOrderId));
             }
-            $res = FikenUtils::call($company->getRelContacts(), $this->asArray());
-            if ($res === false) {
-                throw new Exception(sprintf(__('Can not add customer from order id: %s !', 'fiken'), $idOrder));
-            } else {
-                return $res['location'];
+            $client = new FikenApiClient();
+            $r = $client->createContact($company->getSlug(), $this->asArray());
+            if (!$r['ok']) {
+                throw new Exception(sprintf(__('Can not add customer from order id: %s !', 'fiken'), $wcOrderId) . ' :: ' . $r['error']);
             }
+            $id = FikenApiClient::idFromLocation($r['location']);
+            $this->setContactId($id);
+            return $id;
         }
-
     }
 }

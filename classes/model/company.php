@@ -1,153 +1,70 @@
 <?php
-if ( ! class_exists( 'FikenCompany' ) ) {
+
+if (!defined('ABSPATH')) {
+    exit;
+}
+
+if (!class_exists('FikenCompany')) {
 
     include_once FIKEN_PLUGIN_DIR . 'classes/model/fiken_model.php';
+    include_once FIKEN_PLUGIN_DIR . 'classes/api/client.php';
 
     class FikenCompany extends FikenModel
     {
+        public $slug = '';
+        public $name = '';
+        public $organizationNumber = '';
 
-        public $organizationNumber;
-        public $name;
-        public $relSelf;
-        public $relSales;
-        public $relAccounts;
-        public $relContacts;
-
-        function __construct($organizationNumber, $name, $relSelf, $relSales, $relAccounts, $relContacts)
+        public function __construct($slug = '', $name = '', $organizationNumber = '')
         {
-            $this->organizationNumber = $organizationNumber;
-            $this->name = $name;
-            $this->relSelf = $relSelf;
-            $this->relSales = $relSales;
-            $this->relAccounts = $relAccounts;
-            $this->relContacts = $relContacts;
+            $this->slug               = (string) $slug;
+            $this->name               = (string) $name;
+            $this->organizationNumber = (string) $organizationNumber;
         }
 
         protected function getDef()
         {
-            return array('organizationNumber', 'name', 'relSelf', 'relSales', 'relAccounts', 'relContacts');
+            return array('slug', 'name', 'organizationNumber');
         }
 
+        public function getSlug()                 { return $this->slug; }
+        public function setSlug($v)               { $this->slug = (string) $v; }
+        public function getName()                 { return $this->name; }
+        public function setName($v)               { $this->name = (string) $v; }
+        public function getOrganizationNumber()   { return $this->organizationNumber; }
+        public function setOrganizationNumber($v) { $this->organizationNumber = (string) $v; }
 
-        public function setName($name)
+        public static function fromArray(array $data)
         {
-            $this->name = $name;
+            return new self(
+                isset($data['slug']) ? $data['slug'] : '',
+                isset($data['name']) ? $data['name'] : '',
+                isset($data['organizationNumber']) ? $data['organizationNumber'] : ''
+            );
         }
 
-        public function getName()
-        {
-            return $this->name;
-        }
-
-        public function setNumber($organizationNumber)
-        {
-            $this->organizationNumber = $organizationNumber;
-        }
-
-        public function getNumber()
-        {
-            return $this->organizationNumber;
-        }
-
-        public function setRelAccounts($relAccounts)
-        {
-            $this->relAccounts = $relAccounts;
-        }
-
-        public function getRelAccounts()
-        {
-            return $this->relAccounts;
-        }
-
-        public function setRelContacts($relContacts)
-        {
-            $this->relContacts = $relContacts;
-        }
-
-        public function getRelContacts()
-        {
-            return $this->relContacts;
-        }
-
-        public function setRelSales($relSales)
-        {
-            $this->relSales = $relSales;
-        }
-
-        public function getRelSales()
-        {
-            return $this->relSales;
-        }
-
-        public function setRelSelf($relSelf)
-        {
-            $this->relSelf = $relSelf;
-        }
-
-        public function getRelSelf()
-        {
-            return $this->relSelf;
-        }
-
-        /**
-         * @param $orgNumber
-         * @return FikenCompany
-         */
-        public static function getCompanyFromFiken($orgNumber)
-        {
-            /** @var $res FikenCompany|bool */
-            $res = false;
-            $companies = FikenCompany::getCompaniesFromFiken();
-            foreach ($companies as $comp) {
-                if ($comp->getNumber() == $orgNumber) {
-                    $res = $comp;
-                }
-            }
-            return $res;
-        }
-
-        /**
-         * @return FikenCompany[]|bool
-         */
         public static function getCompaniesFromFiken()
         {
-            /** @var $res FikenCompany[] */
             $res = array();
-            $result = FikenUtils::call("/companies");
-            if ($result && isset($result['body'])) {
-                $hal = FikenHal::fromJson($result['body'], 1);
-                $resources = $hal->getResources();
-                if (isset($resources) && $resources) {
-                    if (array_key_exists(FikenUtils::FIKEN_BASE_URL . "/rel/companies", $resources)) {
-                        $companies = $resources[FikenUtils::FIKEN_BASE_URL . "/rel/companies"];
-                        foreach ($companies as $comp) {
-                            $links = $comp->getLinks();
-                            $rSales = '';
-                            if (array_key_exists(FikenUtils::FIKEN_BASE_URL . "/rel/sales", $links) && $links[FikenUtils::FIKEN_BASE_URL . "/rel/sales"]) {
-                                $rSales = $links[FikenUtils::FIKEN_BASE_URL . "/rel/sales"][0]->getUri();
-                            }
-                            $rAccounts = '';
-                            if (array_key_exists(FikenUtils::FIKEN_BASE_URL . "/rel/accounts", $links) && $links[FikenUtils::FIKEN_BASE_URL . "/rel/accounts"]) {
-                                $rAccounts = $links[FikenUtils::FIKEN_BASE_URL . "/rel/accounts"][0]->getUri();
-                            }
-                            $rContacts = '';
-                            if (array_key_exists(FikenUtils::FIKEN_BASE_URL . "/rel/contacts", $links) && $links[FikenUtils::FIKEN_BASE_URL . "/rel/contacts"]) {
-                                $rContacts = $links[FikenUtils::FIKEN_BASE_URL . "/rel/contacts"][0]->getUri();
-                            }
-                            $data = $comp->getData();
-                            $res[] = new FikenCompany(preg_replace('%^(.+)/%','', $comp->getUri()), $data['name'], $comp->getUri(), $rSales, $rAccounts, $rContacts);
-                        }
-                    }
-                }
+            $client = new FikenApiClient();
+            if (!$client->hasToken()) { return $res; }
+            $r = $client->getCompanies();
+            if (!$r['ok'] || !is_array($r['body'])) { return $res; }
+            foreach ($r['body'] as $row) {
+                if (is_array($row)) { $res[] = self::fromArray($row); }
             }
-            if ($res) {
-                $arrKeySort = array();
-                foreach ($res as $item) {
-                    $arrKeySort[] = $item->getName();
-                }
-                array_multisort($arrKeySort, $res);
-            }
+            usort($res, function ($a, $b) { return strcasecmp($a->getName(), $b->getName()); });
             return $res;
+        }
+
+        public static function getCompanyBySlug($slug)
+        {
+            if (empty($slug)) { return false; }
+            $client = new FikenApiClient();
+            if (!$client->hasToken()) { return false; }
+            $r = $client->getCompany($slug);
+            if (!$r['ok'] || !is_array($r['body'])) { return false; }
+            return self::fromArray($r['body']);
         }
     }
 }
