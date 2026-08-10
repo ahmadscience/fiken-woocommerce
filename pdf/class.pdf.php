@@ -1,5 +1,9 @@
 <?php
 
+if (!defined('ABSPATH')) {
+    exit;
+}
+
 if (!class_exists('FikenPDF')) {
 
     include_once FIKEN_PLUGIN_DIR . 'pdf/html_invoice.php';
@@ -12,7 +16,6 @@ if (!class_exists('FikenPDF')) {
         {
             $this->order = $order;
         }
-
 
         private function get_order_items()
         {
@@ -64,7 +67,6 @@ if (!class_exists('FikenPDF')) {
             return $data_list;
         }
 
-
         private function get_formatted_item_price($item, $type, $tax_display = '')
         {
             $qty = $item->get_quantity();
@@ -90,7 +92,6 @@ if (!class_exists('FikenPDF')) {
             return $totals;
         }
 
-
         private function getViewData()
         {
             $data = array();
@@ -106,13 +107,11 @@ if (!class_exists('FikenPDF')) {
             return $data;
         }
 
-
         public function generate_pdf($fileName)
         {
             if (!class_exists('Dompdf')) {
                 require_once(FIKEN_PLUGIN_DIR . "pdf/lib/dompdf/autoload.inc.php");
             }
-
             $dompdf = new Dompdf\Dompdf();
             $dompdf->loadHtml(FikenHtmlInvoice::getHtmlInvoice($this->getViewData()));
             $dompdf->set_Paper('A4', 'portrait');
@@ -120,8 +119,5 @@ if (!class_exists('FikenPDF')) {
             file_put_contents($fileName, $dompdf->output());
             return file_exists($fileName);
         }
-
-
     }
-
 }
