@@ -1,89 +1,122 @@
 <?php
-if ( ! class_exists( 'FikenDB' ) ) {
+
+if (!defined('ABSPATH')) {
+    exit;
+}
+
+if (!class_exists('FikenDB')) {
 
     include_once FIKEN_PLUGIN_DIR . 'classes/utils.php';
 
     class FikenDB
     {
-
         public static function install()
         {
             global $wpdb;
             $wpdb->hide_errors();
-            $collate = '';
-            if ($wpdb->has_cap('collation')) {
-                if (!empty($wpdb->charset)) {
-                    $collate .= "DEFAULT CHARACTER SET $wpdb->charset";
-                }
-                if (!empty($wpdb->collate)) {
-                    $collate .= " COLLATE $wpdb->collate";
-                }
-            }
 
-            require_once(ABSPATH . 'wp-admin/includes/upgrade.php');
+            $charset_collate = $wpdb->get_charset_collate();
+            require_once ABSPATH . 'wp-admin/includes/upgrade.php';
 
             $tables = "
-                   CREATE TABLE {$wpdb->prefix}fiken_orders (
-					id_order INT(10) NOT NULL,
-					current_state INT(10) NOT NULL,
-					mes TEXT,
-					last_update DATETIME NOT NULL,
-	    			PRIMARY KEY  (id_order)
-				    )$collate;
-			      CREATE TABLE IF NOT EXISTS {$wpdb->prefix}fiken_order_history (
-                    id_history INT(10) NOT NULL AUTO_INCREMENT,
-					id_order INT(10) NOT NULL,
-					id_state INT(10) NOT NULL,
-					mes TEXT,
-					last_update DATETIME NOT NULL,
-	    			PRIMARY KEY  (id_history),
-	    			KEY  id_order (id_order)
-				  )$collate;
-                  CREATE TABLE {$wpdb->prefix}fiken_states (
-					id_state INT(10) NOT NULL,
-					name VARCHAR(50) NOT NULL,
-					PRIMARY KEY  (id_state)
-                  )$collate;
-                  ";
-
+CREATE TABLE {$wpdb->prefix}fiken_orders (
+    id_order BIGINT(20) UNSIGNED NOT NULL,
+    current_state INT(10) NOT NULL,
+    mes TEXT,
+    last_update DATETIME NOT NULL,
+    PRIMARY KEY  (id_order)
+) $charset_collate;
+CREATE TABLE {$wpdb->prefix}fiken_order_history (
+    id_history BIGINT(20) UNSIGNED NOT NULL AUTO_INCREMENT,
+    id_order BIGINT(20) UNSIGNED NOT NULL,
+    id_state INT(10) NOT NULL,
+    mes TEXT,
+    last_update DATETIME NOT NULL,
+    PRIMARY KEY  (id_history),
+    KEY id_order (id_order)
+) $charset_collate;
+CREATE TABLE {$wpdb->prefix}fiken_states (
+    id_state INT(10) NOT NULL,
+    name VARCHAR(50) NOT NULL,
+    PRIMARY KEY  (id_state)
+) $charset_collate;
+";
             dbDelta($tables);
 
-            $wpdb->query("INSERT INTO `{$wpdb->prefix}fiken_states` (`id_state`, `name`)
-                                    SELECT * FROM (SELECT 1, 'Not  transferred') AS tmp
-                                    WHERE NOT EXISTS ( SELECT `id_state` FROM `{$wpdb->prefix}fiken_states` WHERE id_state = 1) LIMIT 1");
+            self::seedStates();
+            self::backfillOrders();
+        }
 
-            $wpdb->query("INSERT INTO `{$wpdb->prefix}fiken_states` (`id_state`, `name`)
-                                      SELECT * FROM (SELECT 2, 'Transferred') AS tmp
-                                      WHERE NOT EXISTS ( SELECT `id_state` FROM `{$wpdb->prefix}fiken_states` WHERE id_state = 2) LIMIT 1");
+        private static function seedStates()
+        {
+            global $wpdb;
+            $states = array(
+                array(1, 'Not transferred'),
+                array(2, 'Transferred'),
+                array(3, 'Failed'),
+                array(4, 'Skipped'),
+                array(5, 'Partially-skipped'),
+            );
+            foreach ($states as $s) {
+                $wpdb->query($wpdb->prepare(
+                    "INSERT IGNORE INTO {$wpdb->prefix}fiken_states (id_state, name) VALUES (%d, %s)",
+                    $s[0],
+                    $s[1]
+                ));
+            }
+        }
 
-            $wpdb->query("INSERT INTO `{$wpdb->prefix}fiken_states` (`id_state`, `name`)
-                                    SELECT * FROM (SELECT 3, 'Failed') AS tmp
-                                    WHERE NOT EXISTS ( SELECT `id_state` FROM `{$wpdb->prefix}fiken_states` WHERE id_state = 3) LIMIT 1");
-
-            $wpdb->query("INSERT INTO `{$wpdb->prefix}fiken_states` (`id_state`, `name`)
-                                    SELECT * FROM (SELECT 4, 'Skipped') AS tmp
-                                    WHERE NOT EXISTS ( SELECT `id_state` FROM `{$wpdb->prefix}fiken_states` WHERE id_state = 4) LIMIT 1");
-
-            $wpdb->query("INSERT INTO `{$wpdb->prefix}fiken_states` (`id_state`, `name`)
-                                    SELECT * FROM (SELECT 5, 'Partially-skipped') AS tmp
-                                    WHERE NOT EXISTS ( SELECT `id_state` FROM `{$wpdb->prefix}fiken_states` WHERE id_state = 5) LIMIT 1");
-
-
-            $wpdb->query("INSERT INTO `{$wpdb->prefix}fiken_order_history` (`id_order`, `id_state`, `mes`, `last_update`)
-                                    SELECT o.`id`, 1 , '' as mes, NOW()
-                                    FROM `{$wpdb->prefix}posts` o
-                                    WHERE o.`post_type` = 'shop_order' and o.`id` not in (select `id_order` from `{$wpdb->prefix}fiken_orders`)");
-
-            $wpdb->query("INSERT INTO `{$wpdb->prefix}fiken_orders` (`id_order`, `current_state`, `mes`, `last_update`)
-                                    SELECT o.`id`, 1 , '' as mes, NOW()
-                                    FROM `{$wpdb->prefix}posts` o
-                                    WHERE o.`post_type` = 'shop_order' and o.`id` not in (select `id_order` from `{$wpdb->prefix}fiken_orders`)");
+        private static function backfillOrders()
+        {
+            if (!function_exists('wc_get_orders')) {
+                return;
+            }
+            global $wpdb;
+            $page  = 1;
+            $limit = 500;
+            do {
+                $ids = wc_get_orders(array(
+                    'type'   => 'shop_order',
+                    'limit'  => $limit,
+                    'page'   => $page,
+                    'return' => 'ids',
+                    'status' => 'any',
+                    'orderby'=> 'id',
+                    'order'  => 'ASC',
+                ));
+                if (empty($ids)) {
+                    break;
+                }
+                foreach ($ids as $id) {
+                    $id = (int) $id;
+                    $exists = $wpdb->get_var($wpdb->prepare(
+                        "SELECT id_order FROM {$wpdb->prefix}fiken_orders WHERE id_order = %d",
+                        $id
+                    ));
+                    if ($exists) {
+                        continue;
+                    }
+                    $wpdb->insert(
+                        "{$wpdb->prefix}fiken_orders",
+                        array(
+                            'id_order'      => $id,
+                            'current_state' => 1,
+                            'mes'           => '',
+                            'last_update'   => current_time('mysql'),
+                        ),
+                        array('%d', '%d', '%s', '%s')
+                    );
+                }
+                if (count($ids) < $limit) {
+                    break;
+                }
+                $page++;
+            } while (true);
         }
 
         public static function uninstall()
         {
-        /*NOP*/
+            // No-op — actual cleanup lives in top-level uninstall.php.
         }
-
     }
 }

@@ -1,128 +1,60 @@
 <?php
+
+if (!defined('ABSPATH')) {
+    exit;
+}
+
 if (!class_exists('FikenAccount')) {
 
     include_once FIKEN_PLUGIN_DIR . 'classes/model/fiken_model.php';
+    include_once FIKEN_PLUGIN_DIR . 'classes/api/client.php';
 
     class FikenAccount extends FikenModel
     {
+        public $code = '';
+        public $name = '';
 
-        public $code;
-        public $name;
-        public $relSelf;
-
-        function __construct($code, $name, $relSelf)
+        public function __construct($code = '', $name = '')
         {
-            $this->code = $code;
-            $this->name = $name;
-            $this->relSelf = $relSelf;
+            $this->code = (string) $code;
+            $this->name = (string) $name;
         }
 
         protected function getDef()
         {
-            return array('code', 'name', 'relSelf');
+            return array('code', 'name');
         }
 
-        /**
-         * @param mixed $code
-         */
-        public function setCode($code)
+        public function getCode()      { return $this->code; }
+        public function setCode($v)    { $this->code = (string) $v; }
+        public function getName()      { return $this->name; }
+        public function setName($v)    { $this->name = (string) $v; }
+
+        public static function getAccountsFromFiken($companySlug, $accFilter = '', $year = 0)
         {
-            $this->code = $code;
-        }
-
-        /**
-         * @return mixed
-         */
-        public function getCode()
-        {
-            return $this->code;
-        }
-
-        /**
-         * @param mixed $name
-         */
-        public function setName($name)
-        {
-            $this->name = $name;
-        }
-
-        /**
-         * @return mixed
-         */
-        public function getName()
-        {
-            return $this->name;
-        }
-
-        /**
-         * @param mixed $relSelf
-         */
-        public function setRelSelf($relSelf)
-        {
-            $this->relSelf = $relSelf;
-        }
-
-        /**
-         * @return mixed
-         */
-        public function getRelSelf()
-        {
-            return $this->relSelf;
-        }
-
-
-        /**
-         * @param $orgNumber
-         * @param string $accFilter optional (all)
-         * @param int $year optional (current)
-         * @return FikenAccount[]|bool
-         */
-
-        public static function getAccountsFromFiken($orgNumber, $accFilter = '', $year = 0)
-        {
-            /** @var $res FikenAccount[] */
             $res = array();
-            $res[] = new FikenAccount('0', __('Empty account','fiken') , '');
-            if ($year == 0) {
-                $year = date("Y");
-            }
-            $company = FikenCompany::getCompanyFromFiken($orgNumber);
-            if ($company) {
-                $rel = str_replace('{year}', $year, $company->getRelAccounts());
-                $result = FikenUtils::call($rel);
-                if (isset($result['body']) && $result['body']) {
-                    $hal = FikenHal::fromJson($result['body'], 1);
-                    $resources = $hal->getResources();
-                    if (isset($resources) && $resources) {
-                        if (array_key_exists(FikenUtils::FIKEN_BASE_URL . "/rel/accounts", $resources)) {
-                            $accounts = $resources[FikenUtils::FIKEN_BASE_URL . "/rel/accounts"];
-                            foreach ($accounts as $acc) {
-                                $data = $acc->getData();
-                                if ($accFilter) {
+            $res[] = new FikenAccount('0', __('Empty account', 'fiken'));
 
-                                    //22.02.2015 change filter
-//                                  if (strpos($data['code'], $accFilter) === 0) {
-                                    if (preg_match($accFilter, $data['code'])) {
-                                        $res[] = new FikenAccount($data['code'], $data['name'], $acc->getUri());
-                                    }
-                                } else {
-                                    $res[] = new FikenAccount($data['code'], $data['name'], $acc->getUri());
-                                }
-                            }
-                        }
-                    }
+            if (empty($companySlug)) { return $res; }
+            if ($year == 0) { $year = (int) date('Y'); }
+
+            $client = new FikenApiClient();
+            if (!$client->hasToken()) { return $res; }
+
+            $r = $client->getAccounts($companySlug, $year);
+            if (!$r['ok'] || !is_array($r['body'])) { return $res; }
+
+            foreach ($r['body'] as $data) {
+                if (!is_array($data) || empty($data['code'])) { continue; }
+                if ($accFilter) {
+                    $match = @preg_match($accFilter, $data['code']);
+                    if ($match !== 1) { continue; }
                 }
+                $res[] = new FikenAccount($data['code'], isset($data['name']) ? $data['name'] : '');
             }
-            if ($res) {
-                $arrKeySort = array();
-                foreach ($res as $item) {
-                    $arrKeySort[] = $item->getCode();
-                }
-                array_multisort($arrKeySort, $res);
-            }
+
+            usort($res, function ($a, $b) { return strcmp($a->getCode(), $b->getCode()); });
             return $res;
         }
-
-
     }
 }
