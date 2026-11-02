@@ -151,7 +151,7 @@ class FikenHal
      *
      * @return Hal
      */
-    public function addResource($rel, FikenHal $resource = null, $forceArray = true)
+    public function addResource($rel, ?FikenHal $resource = null, $forceArray = true)
     {
         $this->resources[$rel][] = $resource;
 
@@ -193,7 +193,7 @@ class FikenHal
     /**
      * Set resource's data
      */
-    public function setData(Array $data = null)
+    public function setData(?array $data = null)
     {
         $this->data = $data;
         return $this;
@@ -495,7 +495,7 @@ class HalJsonRenderer implements HalRenderer
      * @param Hal $resource
      * @return array
      */
-    protected function arrayForJson(FikenHal $resource = null)
+    protected function arrayForJson(?FikenHal $resource = null)
     {
         if ($resource == null) {
             return array();
