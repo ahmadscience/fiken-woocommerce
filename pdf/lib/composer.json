@@ -1,0 +1,17 @@
+{
+    "name": "fiken/woocommerce-pdf-deps",
+    "description": "Vendored PDF dependencies for the Fiken WooCommerce plugin. Run `composer install --no-dev` in this folder to update.",
+    "type": "project",
+    "license": "GPL-2.0-or-later",
+    "require": {
+        "dompdf/dompdf": "^3.1"
+    },
+    "config": {
+        "platform": {
+            "php": "7.4"
+        },
+        "prepend-autoloader": false,
+        "optimize-autoloader": true,
+        "autoloader-suffix": "FikenWooPdf"
+    }
+}
