@@ -115,8 +115,14 @@ if (!class_exists('FikenUtils')) {
             @curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
             @curl_setopt($ch, CURLOPT_FORBID_REUSE, true);
             @curl_setopt($ch, CURLOPT_TIMEOUT, 50);
-            @curl_setopt($ch, CURLOPT_SSL_VERIFYPEER, false);
-            @curl_setopt($ch, CURLOPT_SSL_VERIFYHOST, false);
+            // Always verify Fiken's certificate: every request carries the Fiken login in clear text.
+            @curl_setopt($ch, CURLOPT_SSL_VERIFYPEER, true);
+            @curl_setopt($ch, CURLOPT_SSL_VERIFYHOST, 2);
+            // Hosts without a system CA bundle: use the one WordPress ships (as wp_remote_* does).
+            $wpCaBundle = ABSPATH . WPINC . '/certificates/ca-bundle.crt';
+            if (!ini_get('curl.cainfo') && file_exists($wpCaBundle)) {
+                @curl_setopt($ch, CURLOPT_CAINFO, $wpCaBundle);
+            }
 
             if (isset($data) && $data) {
                 @curl_setopt($ch, CURLOPT_POST, true);

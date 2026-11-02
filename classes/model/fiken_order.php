@@ -164,6 +164,31 @@ if (!class_exists('FikenOrder')) {
             return $res;
         }
 
+        /**
+         * Sort keys accepted from the request, mapped to the SQL used in ORDER BY.
+         * @return array
+         */
+        public static function getSortableColumns()
+        {
+            return array(
+                'posts.id' => 'posts.`id`',
+                'customer' => 'customer',
+                'current_state' => 'fo.`current_state`',
+                'total_paid' => 'total_paid',
+                'date_add' => 'date_add',
+                'date_upd' => 'date_upd',
+            );
+        }
+
+        /**
+         * @param mixed $sort
+         * @return bool
+         */
+        public static function isSortableColumn($sort)
+        {
+            return is_string($sort) && array_key_exists($sort, self::getSortableColumns());
+        }
+
         public static function getOrdersWC($data = array())
         {
             global $wpdb;
@@ -199,16 +224,15 @@ if (!class_exists('FikenOrder')) {
                 $sql .= " and  fo.`current_state` = '" . (int)$data['filter_order_status_id'] . "'";
             }
 
-            $sql .= " ORDER BY ";
+            // ORDER BY cannot be escaped, only whitelisted: map the request value to a fixed column.
+            $sortColumns = self::getSortableColumns();
+            $sortKey = (isset($data['sort']) && self::isSortableColumn($data['sort'])) ? $data['sort'] : 'posts.id';
+            $sql .= " ORDER BY " . $sortColumns[$sortKey];
 
-            if (isset($data['sort']) && $data['sort']) {
-                $sql .= $wpdb->_escape($data['sort']);
+            if (isset($data['asc_desc']) && strtoupper((string)$data['asc_desc']) === 'ASC') {
+                $sql .= " ASC ";
             } else {
-                $sql .= " posts.`id` ";
-            }
-
-            if (isset($data['asc_desc']) && $data['asc_desc']) {
-                $sql .= " " . $wpdb->_escape($data['asc_desc']) . " ";
+                $sql .= " DESC ";
             }
 
             if ((isset($data['start']) && $data['start']) || (isset($data['limit']) && $data['limit'])) {

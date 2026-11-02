@@ -44,10 +44,12 @@ jQuery(document).ready(function () {
 
     jQuery('.reg_order').click(function () {
         var orderId = jQuery(this).data('order-id');
-        if (jQuery('#order_id_' + orderId + ' .txtStatus').data('status-id') == '2') {
+        var statusId = jQuery('#order_id_' + orderId + ' .txtStatus').data('status-id');
+        // 2 = Transferred, 5 = Partially-skipped: the order already has a sale in Fiken.
+        if (statusId == '2' || statusId == '5') {
             jConfirm(admin_fiken_confirm_reg_if_transferred.replace("%s", jQuery('#order_id_' + orderId + ' .txtStatus').text()), 'orderId', function (res) {
                 if (res) {
-                    regOrder(orderId);
+                    regOrder(orderId, true);
                 }
             });
         } else {
@@ -179,7 +181,7 @@ function filter() {
 }
 
 
-function regOrder(orderId) {
+function regOrder(orderId, force) {
     jQuery('.alert-danger').hide('fast');
     jQuery('.alert-success').hide('fast');
     jQuery.ajax({
@@ -191,6 +193,8 @@ function regOrder(orderId) {
         data: {
             ajax: true,
             action: 'fiken_register_sale',
+            _ajax_nonce: admin_fiken_ajax_nonce,
+            force: force ? 1 : 0,
             order_id: orderId
         },
         beforeSend: function () {
@@ -266,6 +270,7 @@ function regOrderMass() {
                     data: {
                         ajax: true,
                         action: 'fiken_register_sale',
+                        _ajax_nonce: admin_fiken_ajax_nonce,
                         order_id: orderId
                     },
                     beforeSend: function () {
@@ -329,6 +334,7 @@ function view_status_history(orderId) {
         data: {
             ajax: true,
             action: 'fiken_get_order_status_history',
+            _ajax_nonce: admin_fiken_ajax_nonce,
             order_id: orderId
         },
         beforeSend: function () {

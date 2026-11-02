@@ -14,6 +14,7 @@ class FikenView
         ?>
         <script type="text/javascript">
             var admin_fiken_base_url_ajax = '<?php echo $admin_fiken_base_url_ajax ;?>';
+            var admin_fiken_ajax_nonce = '<?php echo esc_js(wp_create_nonce(Fiken::AJAX_NONCE_ACTION)); ?>';
             var admin_fiken_base_url = '<?php echo $admin_fiken_base_url ;?>';
             var admin_fiken_current_tab = '<?php echo  $current_tab ;?>';
             var admin_fiken_confirm_reg_if_transferred = '<?php _e('The order marked as %s. Are you sure?', 'fiken') ;?>';
@@ -289,6 +290,7 @@ class FikenView
 
             <form method="post" enctype="multipart/form-data" id="form_settings" name="form_settings" >
                 <input type="hidden" name="submitSettings" value="">
+                <?php wp_nonce_field(Fiken::SETTINGS_NONCE_ACTION, Fiken::SETTINGS_NONCE_NAME); ?>
                 <input type="hidden" value="fiken-plugin-page" name="page">
 
 
@@ -426,7 +428,7 @@ class FikenView
                                     <?php if (!isset($list_sales_kind_fiken) || !$list_sales_kind_fiken) { ?>
                                         <option value="" style='display:none;' selected="selected"><?php _e('No sale types','fiken') ;?></option>
                                         <?php } elseif (!isset($selectedSalesKind) || !$selectedSalesKind || !isset($selectedSalesKind[$fiken_sale_kind_key]) || !$selectedSalesKind[$fiken_sale_kind_key]) { ?>
-                                        <option value="" style='display:none;' elected="selected"><?php _e('Select sale type :','fiken') ;?> </option>
+                                        <option value="" style='display:none;' selected="selected"><?php _e('Select sale type :','fiken') ;?> </option>
                                     <?php } ;?>
 
                                     <?php if (isset($list_sales_kind_fiken) && $list_sales_kind_fiken) {?>
