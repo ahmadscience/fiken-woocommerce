@@ -83,6 +83,9 @@ if (!class_exists('FikenProvider')) {
         }
 
 
+        /**
+         * @throws Exception when the line has VAT but its tax rate is not mapped
+         */
         public static function getVatCode($product)
         {
             $res = FikenUtils::VAT_NONE;
@@ -93,12 +96,15 @@ if (!class_exists('FikenProvider')) {
                     foreach ($taxes as $taxCode => $taxValue) {
                         if (isset($taxValue) && $taxValue) {
                             $vatSettings = json_decode(get_option(FikenUtils::CONF_FIKEN_VATS_MAPPING));
-                            if (isset($vatSettings)) {
-                                if (isset($taxCode)
-                                    && isset($vatSettings->{$taxCode}->{FikenUtils::CTRL_NAME_VAT})
-                                    && $vatSettings->{$taxCode}->{FikenUtils::CTRL_NAME_VAT}) {
-                                    $res = $vatSettings->{$taxCode}->{FikenUtils::CTRL_NAME_VAT};
-                                }
+                            if (isset($vatSettings)
+                                && isset($vatSettings->{$taxCode}->{FikenUtils::CTRL_NAME_VAT})
+                                && $vatSettings->{$taxCode}->{FikenUtils::CTRL_NAME_VAT}) {
+                                $res = $vatSettings->{$taxCode}->{FikenUtils::CTRL_NAME_VAT};
+                            } elseif ((float)$taxValue != 0) {
+                                // The line has VAT but its tax rate is not mapped: sending it as "NONE"
+                                // would book the VAT wrongly in Fiken, so stop and say what to fix.
+                                // (An unmapped 0 % rate still goes as NONE, as before.)
+                                throw new Exception(sprintf(__('WooCommerce tax rate id %s is not mapped to a Fiken VAT type. Map it under Fiken > Settings > VAT Mapping and transfer the order again.', 'fiken'), $taxCode));
                             }
                             /**
                              * takes first not null tax

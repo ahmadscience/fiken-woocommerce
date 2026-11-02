@@ -81,6 +81,37 @@ if (!class_exists('Fiken')) {
             $ctr->ajaxProcessRegisterSale();
         }
 
+        /**
+         * Transfers run in the background of a status change, so a failure is otherwise only
+         * visible on the Fiken page. Warn shop managers about recent failures.
+         */
+        public static function failed_transfers_notice()
+        {
+            if (!current_user_can(self::CAPABILITY)) {
+                return;
+            }
+            $screen = function_exists('get_current_screen') ? get_current_screen() : null;
+            if ($screen && $screen->id === self::$page_hook) {
+                return; // the Fiken page shows the states itself
+            }
+            global $wpdb;
+            $failed = (int)$wpdb->get_var(
+                "SELECT COUNT(*) FROM `{$wpdb->prefix}fiken_orders`
+                 WHERE `current_state` = 3 AND `last_update` >= DATE_SUB(NOW(), INTERVAL 30 DAY)"
+            );
+            if ($failed < 1) {
+                return;
+            }
+            $url = add_query_arg(array(
+                'page' => 'fiken-plugin-page',
+                'filter_order_status_id' => 3,
+                'filter_date_start' => gmdate('Y-m-d', strtotime('-1 year')),
+            ), admin_url('admin.php'));
+            echo '<div class="notice notice-warning"><p>'
+                . esc_html(sprintf(_n('%d order failed to transfer to Fiken in the last 30 days.', '%d orders failed to transfer to Fiken in the last 30 days.', $failed, 'fiken'), $failed))
+                . ' <a href="' . esc_url($url) . '">' . esc_html__('Show failed orders', 'fiken') . '</a></p></div>';
+        }
+
         public static function process_register_sale($order_id)
         {
             include_once FIKEN_PLUGIN_DIR . 'classes/model/sale.php';

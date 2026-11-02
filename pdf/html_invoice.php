@@ -3,6 +3,21 @@ if (!class_exists('FikenHtmlInvoice')) {
 
     class FikenHtmlInvoice
     {
+        /**
+         * HTML that WooCommerce formats for us (prices, totals, item meta, notes):
+         * keep the markup, drop anything that is not ordinary post HTML.
+         */
+        private static function html($value)
+        {
+            return wp_kses_post((string)$value);
+        }
+
+        /** Plain text (names, numbers, SKUs): escape everything. */
+        private static function text($value)
+        {
+            return esc_html((string)$value);
+        }
+
         public static function getHtmlInvoice($data)
         {
 
@@ -229,7 +244,7 @@ table.totals td.price span:first-child {
                 <tr>
                     <td class='header'>" . __('Invoice', 'fiken') . "</td>
                     <td class='shop-info'>
-                        <div class='shop-name'><h3>" . get_bloginfo('name') . " </h3></div>
+                        <div class='shop-name'><h3>" . self::text(get_bloginfo('name')) . " </h3></div>
                     </td>
                 </tr>
                 <tr>
@@ -243,21 +258,21 @@ table.totals td.price span:first-child {
                     <td>
                         <div class='order-information'>
                             <span class='order-number-label'>" . __('Invoice Number:', 'fiken') . "</span>
-                            <span class='order-number'>" . $data['invoice_number'] . "</span><br />
+                            <span class='order-number'>" . self::text($data['invoice_number']) . "</span><br />
 
                             <span class='order-date-label'>" . __('Invoice Date:', 'fiken') . "</span>
-                            <span class='order-date'>" . $data['order_date'] . "</span><br />
+                            <span class='order-date'>" . self::text($data['order_date']) . "</span><br />
 
                             <span class='order-number-label'>" . __('Order Number:', 'fiken') . "</span>
-                            <span class='order-number'>" . $data['invoice_number'] . "</span><br />
+                            <span class='order-number'>" . self::text($data['invoice_number']) . "</span><br />
                             <span class='order-date-label'>" . __('Order Date:', 'fiken') . "</span>
-                            <span class='order-date'>" . $data['order_date'] . "</span><br />
+                            <span class='order-date'>" . self::text($data['order_date']) . "</span><br />
                             <span class='order-payment-label'>" . __('Payment Method:', 'fiken') . "</span>
-                            <span class='order-payment'>" . $data['payment_method'] . "</span><br />
+                            <span class='order-payment'>" . self::text($data['payment_method']) . "</span><br />
                         </div>
                     </td>
                     <td>
-                        <div class='recipient-address'>" . $data['billing_address'] . "</div>
+                        <div class='recipient-address'>" . wp_kses((string)$data['billing_address'], array('br' => array())) . "</div>
                     </td>
                 </tr>
             </table>
@@ -275,20 +290,19 @@ table.totals td.price span:first-child {
                 foreach ($data['order_items'] as $data['item']) {
 
                     $html .= "<tr><td class='description'>" . __('Description', 'fiken') . "
-                    <span class='item-name'>" . $data['item']['name'] . "</span><span class='item-meta'>" . $data['item']['meta'] . "</span>
+                    <span class='item-name'>" . self::text($data['item']['name']) . "</span><span class='item-meta'>" . self::html($data['item']['meta']) . "</span>
                     <dl class='meta'>";
 
                     if (!empty($data['item']['sku'])) {
-                        $html .= " <dt>" . __('SKU:', 'fiken') . "</dt><dd>" . $data['item']['sku'] . "</dd> ";
+                        $html .= " <dt>" . __('SKU:', 'fiken') . "</dt><dd>" . self::text($data['item']['sku']) . "</dd> ";
                     };
 
                     if (!empty($data['item']['weight'])) {
-                        $html .= " <dt>" . __('Weight:', 'fiken') . "</dt><dd>" . $data['item']['weight'] . " "
-                            . get_option('woocommerce_weight_unit') . "</dd>";
+                        $html .= " <dt>" . __('Weight:', 'fiken') . "</dt><dd>" . self::text($data['item']['weight'] . ' ' . get_option('woocommerce_weight_unit')) . "</dd>";
                     };
 
-                    $html .= "</dl></td><td class='quantity'>" . $data['item']['quantity'] . "</td>
-                    <td class='price'>" . $data['item']['order_price'] . "</td></tr>";
+                    $html .= "</dl></td><td class='quantity'>" . self::text($data['item']['quantity']) . "</td>
+                    <td class='price'>" . self::html($data['item']['order_price']) . "</td></tr>";
 
                 }
             }
@@ -296,15 +310,15 @@ table.totals td.price span:first-child {
             $html .= " </tbody><tfoot><tr class='no-borders'><td class='no-borders' colspan='3'><table class='totals'><tfoot>";
 
             foreach ($data['order_totals'] as $key => $total) {
-                $html .= "<tr class='" . $key . "'><td class='no-borders'>&nbsp;</td><th class='description'>" . $total['label'] . "</th>
-                <td class='price'><span class='totals-price'>" . $total['value'] . " </span></td></tr>";
+                $html .= "<tr class='" . esc_attr($key) . "'><td class='no-borders'>&nbsp;</td><th class='description'>" . self::html($total['label']) . "</th>
+                <td class='price'><span class='totals-price'>" . self::html($total['value']) . " </span></td></tr>";
             }
 
             $html .= " </tfoot></table></td></tr></tfoot></table><table class='notes container'>
                         <tr><td colspan='3'><div class='notes-shipping'>";
 
             if ($data['shipping_notes']) {
-                $html .= "<h3>" . __('Customer Notes', 'fiken') . "</h3>" . $data['shipping_notes'];
+                $html .= "<h3>" . __('Customer Notes', 'fiken') . "</h3>" . self::html($data['shipping_notes']);
             }
             $html .= "</div></td></tr></table></body></html>";
             return $html;

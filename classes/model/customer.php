@@ -122,6 +122,10 @@ if ( ! class_exists( 'FikenCustomer' ) ) {
         {
             /** @var $res FikenCustomer|bool */
             $res = false;
+            // Without an email we would match any Fiken contact that has no email either.
+            if (trim((string)$email) === '') {
+                return false;
+            }
             $result = FikenUtils::call($company->getRelContacts());
             if (isset($result['body']) && $result['body']) {
                 $hal = FikenHal::fromJson($result['body'], 1);
@@ -131,8 +135,12 @@ if ( ! class_exists( 'FikenCustomer' ) ) {
                         $contacts = $resources[FikenUtils::FIKEN_BASE_URL . "/rel/contacts"];
                         foreach ($contacts as $contact) {
                             $data = $contact->getData();
-                            if (array_key_exists('email', $data) && strtoupper($data['email']) == strtoupper($email)) {
-                                $res = new FikenCustomer($contact->getUri(), $data['name'], $data['email'], $data['address'], '');
+                            if (array_key_exists('email', $data) && strtoupper(trim((string)$data['email'])) == strtoupper(trim((string)$email))) {
+                                $res = new FikenCustomer($contact->getUri(),
+                                    isset($data['name']) ? $data['name'] : '',
+                                    $data['email'],
+                                    isset($data['address']) ? $data['address'] : array(),
+                                    '');
                             }
                         }
                     }
@@ -150,31 +158,37 @@ if ( ! class_exists( 'FikenCustomer' ) ) {
         public static function getCustomerFromOrderWC($order)
         {
             $fikenCustomer = new FikenCustomer();
-            $fikenCustomer->setName($order->billing_first_name . " " . $order->billing_last_name);
-            $fikenCustomer->setEmail($order->billing_email);
+            $fikenCustomer->setName(trim(FikenUtils::orderBilling($order, 'first_name') . " " . FikenUtils::orderBilling($order, 'last_name')));
+            $fikenCustomer->setEmail(FikenUtils::orderBilling($order, 'email'));
 
-            if (isset($order->billing_company) && $order->billing_company) {
-                $fikenCustomer->setOrganizationIdentifier($order->billing_company);
+            $orgNumber = FikenUtils::normalizeOrgNumber(FikenUtils::orderBilling($order, 'company'));
+            if ($orgNumber) {
+                $fikenCustomer->setOrganizationIdentifier($orgNumber);
             }
 
             $address = array();
 
-            if (isset($order->billing_postcode) && $order->billing_postcode) {
-                $address['postalCode'] = $order->billing_postcode;
+            $postcode = FikenUtils::orderBilling($order, 'postcode');
+            if ($postcode) {
+                $address['postalCode'] = $postcode;
             }
-            if (isset($order->billing_city) && $order->billing_city) {
-                $address['postalPlace'] = $order->billing_city;
+            $city = FikenUtils::orderBilling($order, 'city');
+            if ($city) {
+                $address['postalPlace'] = $city;
             }
-            if (isset($order->billing_address_1) && $order->billing_address_1) {
-                $address['address1'] = $order->billing_address_1;
+            $address1 = FikenUtils::orderBilling($order, 'address_1');
+            if ($address1) {
+                $address['address1'] = $address1;
             }
-            if (isset($order->billing_address_2) && $order->billing_address_2) {
-                $address['address2'] = $order->billing_address_2;
+            $address2 = FikenUtils::orderBilling($order, 'address_2');
+            if ($address2) {
+                $address['address2'] = $address2;
             }
-            if (isset($order->billing_country) && $order->billing_country) {
-                $full_country = (isset(WC()->countries->countries[$order->billing_country]))
-                    ? WC()->countries->countries[$order->billing_country]
-                    : $order->billing_country;
+            $country = FikenUtils::orderBilling($order, 'country');
+            if ($country) {
+                $full_country = (isset(WC()->countries->countries[$country]))
+                    ? WC()->countries->countries[$country]
+                    : $country;
                 $address['country'] = $full_country;
             }
             if ($address) {

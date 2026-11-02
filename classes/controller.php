@@ -80,7 +80,8 @@ if (!class_exists('FikenController')) {
                 if (FikenUtils::getIsset(FikenUtils::CTRL_NAME_LOGIN)) {
                     update_option(FikenUtils::CONF_FIKEN_LOGIN, FikenUtils::getValue(FikenUtils::CTRL_NAME_LOGIN));
                 }
-                if (FikenUtils::getIsset(FikenUtils::CTRL_NAME_PASSW)) {
+                // The password is never sent to the browser, so an empty field means "keep the saved one".
+                if (FikenUtils::getIsset(FikenUtils::CTRL_NAME_PASSW) && FikenUtils::getValue(FikenUtils::CTRL_NAME_PASSW) !== '') {
                     update_option(FikenUtils::CONF_FIKEN_PASSW, FikenUtils::getValue(FikenUtils::CTRL_NAME_PASSW));
                 }
                 if (FikenUtils::getIsset(FikenUtils::CTRL_NAME_COMPANY)) {
@@ -101,7 +102,8 @@ if (!class_exists('FikenController')) {
             $data = array();
 
             $data['login'] = get_option(FikenUtils::CONF_FIKEN_LOGIN);
-            $data['password'] = get_option(FikenUtils::CONF_FIKEN_PASSW);
+            $password = get_option(FikenUtils::CONF_FIKEN_PASSW);
+            $data['password_is_set'] = !empty($password);
             $data['company_number'] = get_option(FikenUtils::CONF_FIKEN_COMPANY);
             $data['pdf_inv'] = get_option(FikenUtils::CONF_FIKEN_PDF_INV);
             $data['debug_mode'] = get_option(FikenUtils::CONF_FIKEN_DEBUG_MODE);
@@ -133,7 +135,7 @@ if (!class_exists('FikenController')) {
             $data['selectedSalesKind'] = $selectedSalesKind;
             $data['selectedVat'] = $selectedVat;
 
-            $data = array_merge($data, $this->checkLogin($data['login'], $data['password']));
+            $data = array_merge($data, $this->checkLogin($data['login'], $password));
 
             return $data;
         }
@@ -304,8 +306,10 @@ if (!class_exists('FikenController')) {
                 } else {
                     $res['error'] = __('Unknown error', 'fiken');
                 }
-                $fikenOrderResult = FikenOrder::getFikenOrderById(FikenUtils::getValue('order_id'));
-                $res = array_merge($res, array('order' => $fikenOrderResult->asArray()));
+                $fikenOrderResult = FikenOrder::getFikenOrderById(intval(FikenUtils::getValue('order_id')));
+                if ($fikenOrderResult) {
+                    $res = array_merge($res, array('order' => $fikenOrderResult->asArray()));
+                }
             } else {
                 $res['error'] = __('Order id not set!', 'fiken');
             }

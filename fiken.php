@@ -6,7 +6,8 @@
 Plugin Name: Fiken
 Plugin URI: https://www.fiken.no/
 Description: The Module is used for transferring orders to <a target='_blank' href = 'https://www.fiken.no'>Fiken</a>.
-Version: 1.17-MB-3
+Version: 1.17-MB-4
+Requires PHP: 7.4
 Author: Fiken
 Author URI: https://www.fiken.no/
 License: GPLv2 or later
@@ -18,7 +19,7 @@ if (!defined('ABSPATH')) {
     exit;
 }
 
-define('FIKEN_VERSION', '1.17-MB-3');
+define('FIKEN_VERSION', '1.17-MB-4');
 define('FIKEN_PLUGIN_URL', plugin_dir_url(__FILE__));
 define('FIKEN_PLUGIN_DIR', plugin_dir_path(__FILE__));
 define('FIKEN_PLUGIN_BASENAME', plugin_basename(__FILE__));
@@ -29,6 +30,19 @@ register_activation_hook(__FILE__, array('Fiken', 'plugin_activation'));
 register_deactivation_hook(__FILE__, array('Fiken', 'plugin_deactivation'));
 
 add_action('plugins_loaded', 'fiken_load_lang');
+add_action('before_woocommerce_init', 'fiken_declare_wc_compatibility');
+
+/**
+ * The plugin reads orders from wp_posts, so it does not work with WooCommerce's
+ * High-Performance Order Storage. Declaring that makes WooCommerce warn before HPOS
+ * is switched on, instead of the order list silently going empty.
+ */
+function fiken_declare_wc_compatibility()
+{
+    if (class_exists('Automattic\\WooCommerce\\Utilities\\FeaturesUtil')) {
+        \Automattic\WooCommerce\Utilities\FeaturesUtil::declare_compatibility('custom_order_tables', __FILE__, false);
+    }
+}
 add_action('init', 'fiken_init', 0);
 
 function fiken_init()
@@ -40,6 +54,7 @@ function fiken_init()
         add_action("wp_ajax_fiken_get_order_status_history", array('Fiken', 'ajax_process_get_order_status_history'));
         add_action("wp_ajax_fiken_register_sale", array('Fiken', 'ajax_process_register_sale'));
         add_action('woocommerce_order_status_changed', array('Fiken', 'process_register_sale'));
+        add_action('admin_notices', array('Fiken', 'failed_transfers_notice'));
     } else {
         add_action('admin_notices', 'fiken_err_woo_message');
     }
