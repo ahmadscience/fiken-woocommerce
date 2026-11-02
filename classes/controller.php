@@ -15,9 +15,16 @@ if (!class_exists('FikenController')) {
 
         public $data = array();
 
-        function __construct()
+        /**
+         * @param bool $loadPageData Build the admin page (and handle a settings save).
+         *                           AJAX handlers pass false: they must never save settings
+         *                           or make the page's Fiken API calls.
+         */
+        function __construct($loadPageData = true)
         {
-            $this->init();
+            if ($loadPageData) {
+                $this->init();
+            }
         }
 
 
@@ -64,6 +71,11 @@ if (!class_exists('FikenController')) {
 
         private function postProcess()
         {
+            if (!current_user_can(Fiken::CAPABILITY)) {
+                wp_die(__('You are not allowed to change Fiken settings.', 'fiken'), 403);
+            }
+            check_admin_referer(Fiken::SETTINGS_NONCE_ACTION, Fiken::SETTINGS_NONCE_NAME);
+
             if (FikenUtils::getIsset('submitSettings')) {
                 if (FikenUtils::getIsset(FikenUtils::CTRL_NAME_LOGIN)) {
                     update_option(FikenUtils::CONF_FIKEN_LOGIN, FikenUtils::getValue(FikenUtils::CTRL_NAME_LOGIN));
@@ -149,41 +161,20 @@ if (!class_exists('FikenController')) {
             $data = array();
             $dt = new DateTime();
 
-            if (FikenUtils::getIsset('filter_date_start')) {
-                $filter_date_start = FikenUtils::getValue('filter_date_start');
-            } else {
-                $filter_date_start = $dt->format('Y-m-d');
-            }
+            // Every request value below ends up in SQL and in links on the page,
+            // so only well-formed values are accepted; anything else falls back to the default.
+            $filter_date_start = self::validDate(FikenUtils::getValue('filter_date_start'), $dt->format('Y-m-d'));
+            $filter_date_end = self::validDate(FikenUtils::getValue('filter_date_end'), $dt->format('Y-m-d'));
+            $filter_order_status_id = max(0, intval(FikenUtils::getValue('filter_order_status_id', 0)));
 
-            if (FikenUtils::getIsset('filter_date_end')) {
-                $filter_date_end = FikenUtils::getValue('filter_date_end');
-            } else {
-                $filter_date_end = $dt->format('Y-m-d');
-            }
-
-            if (FikenUtils::getIsset('filter_order_status_id')) {
-                $filter_order_status_id = FikenUtils::getValue('filter_order_status_id');
-            } else {
-                $filter_order_status_id = 0;
-            }
-
-            if (FikenUtils::getIsset('sort')) {
-                $sort = FikenUtils::getValue('sort');
-            } else {
+            $sort = FikenUtils::getValue('sort');
+            if (!FikenOrder::isSortableColumn($sort)) {
                 $sort = 'posts.id';
             }
 
-            if (FikenUtils::getIsset('asc_desc')) {
-                $asc_desc = FikenUtils::getValue('asc_desc');
-            } else {
-                $asc_desc = 'DESC';
-            }
+            $asc_desc = strtoupper((string)FikenUtils::getValue('asc_desc')) === 'ASC' ? 'ASC' : 'DESC';
 
-            if (FikenUtils::getIsset('cur_page')) {
-                $page = FikenUtils::getValue('cur_page');
-            } else {
-                $page = 1;
-            }
+            $page = max(1, intval(FikenUtils::getValue('cur_page', 1)));
 
             $data['orders'] = array();
 
@@ -215,15 +206,15 @@ if (!class_exists('FikenController')) {
             $url = '';
 
             if (FikenUtils::getIsset('filter_date_start')) {
-                $url .= '&filter_date_start=' . FikenUtils::getValue('filter_date_start');
+                $url .= '&filter_date_start=' . $filter_date_start;
             }
 
             if (FikenUtils::getIsset('filter_date_end')) {
-                $url .= '&filter_date_end=' . FikenUtils::getValue('filter_date_end');
+                $url .= '&filter_date_end=' . $filter_date_end;
             }
 
             if (FikenUtils::getIsset('filter_order_status_id')) {
-                $url .= '&filter_order_status_id=' . FikenUtils::getValue('filter_order_status_id');
+                $url .= '&filter_order_status_id=' . $filter_order_status_id;
             }
 
             $pagination = new FikenPagination();
@@ -279,11 +270,31 @@ if (!class_exists('FikenController')) {
         }
 
 
+        /**
+         * @param mixed $value
+         * @param string $default
+         * @return string $value if it is a real YYYY-MM-DD date, otherwise $default
+         */
+        private static function validDate($value, $default)
+        {
+            if (is_string($value) && preg_match('/^\d{4}-\d{2}-\d{2}$/', $value)) {
+                $parts = explode('-', $value);
+                if (checkdate((int)$parts[1], (int)$parts[2], (int)$parts[0])) {
+                    return $value;
+                }
+            }
+            return $default;
+        }
+
+
         function ajaxProcessRegisterSale()
         {
             $res = array();
             if (FikenUtils::getIsset('order_id')) {
-                $result = FikenSale::registerSale(FikenUtils::getValue('order_id'), -1, true);
+                // 'force' is only sent after the shop manager confirmed re-sending an order
+                // that is already in Fiken.
+                $force = (bool)FikenUtils::getValue('force', false);
+                $result = FikenSale::registerSale(intval(FikenUtils::getValue('order_id')), -1, true, $force);
                 if ($result) {
                     if (array_key_exists('error', $result)) {
                         $res = $result;

@@ -264,7 +264,66 @@ if (!class_exists('FikenSale')) {
         }
 
 
-        public static function registerSale($order_id, $orgNumber = -1, $ajax = false)
+        /**
+         * Fiken states meaning a sale for the order already exists in Fiken
+         * (2 = Transferred, 5 = Partially-skipped: sale created, zero-amount lines left out).
+         */
+        private static $statesInFiken = array(2, FikenUtils::EMPTY_PRICE_PARTIAL_ERROR_CODE);
+
+        /**
+         * @return bool whether the order already has a sale in Fiken
+         */
+        public static function isInFiken($orderId)
+        {
+            $fikenOrder = FikenOrder::getFikenOrderById($orderId);
+            return $fikenOrder && in_array(intval($fikenOrder->getCurrentState()), self::$statesInFiken, true);
+        }
+
+        /**
+         * Per-order lock, so two requests at once (payment callback + customer redirect,
+         * or a double click) cannot both send the same order. MySQL's GET_LOCK is atomic
+         * and is released automatically if the request dies.
+         */
+        private static function lockName($orderId)
+        {
+            global $wpdb;
+            return substr($wpdb->prefix . 'fiken_order_' . intval($orderId), 0, 64);
+        }
+
+        private static function acquireLock($orderId)
+        {
+            global $wpdb;
+            return '1' === (string)$wpdb->get_var($wpdb->prepare('SELECT GET_LOCK(%s, 0)', self::lockName($orderId)));
+        }
+
+        private static function releaseLock($orderId)
+        {
+            global $wpdb;
+            $wpdb->query($wpdb->prepare('SELECT RELEASE_LOCK(%s)', self::lockName($orderId)));
+        }
+
+        /**
+         * @param int $order_id
+         * @param int|string $orgNumber
+         * @param bool $ajax
+         * @param bool $force Send even if the order is already in Fiken. Only the admin page
+         *                    sets this, after the shop manager confirmed it.
+         * @return array|bool
+         */
+        public static function registerSale($order_id, $orgNumber = -1, $ajax = false, $force = false)
+        {
+            if (!self::acquireLock($order_id)) {
+                FikenUtils::log(sprintf('Order %s is already being sent to Fiken, skipped', $order_id), 'Register Sale', FikenUtils::LOG_LEVEL_WARNING);
+                return $ajax ? array('error' => sprintf(__('Order id: %s is already being transferred, try again in a moment.', 'fiken'), $order_id)) : false;
+            }
+            try {
+                return self::registerSaleLocked($order_id, $orgNumber, $ajax, $force);
+            } finally {
+                self::releaseLock($order_id);
+            }
+        }
+
+        private static function registerSaleLocked($order_id, $orgNumber, $ajax, $force)
         {
             try {
                 /***  @var $order OrderCore */
@@ -286,8 +345,16 @@ if (!class_exists('FikenSale')) {
                     $wcOrderPostStatus = get_post_status($order->get_id());
                 }
 
-                //first time  -  status 1
-                if (!$ajax) {
+                // Never send an order twice: a status change (e.g. completed -> on-hold -> completed)
+                // or a bulk transfer must not create a second sale in Fiken.
+                if (self::isInFiken($wcOrderId) && !$force) {
+                    FikenUtils::log(sprintf('Order %s is already in Fiken, skipped', $wcOrderId), 'Register Sale', FikenUtils::LOG_LEVEL_INFO);
+                    return $ajax ? array('error' => sprintf(__('Order id: %s is already transferred to Fiken, skipped.', 'fiken'), $wcOrderId)) : false;
+                }
+
+                // first time - add the order to the Fiken list as "Not transferred".
+                // An existing row is left alone, so its state (e.g. Failed) is kept.
+                if (!$ajax && !FikenOrder::getFikenOrderById($wcOrderId)) {
                     $fikenOrder = new FikenOrder($wcOrderId, '1');
                     $fikenOrder->update();
                 }
@@ -499,7 +566,8 @@ if (!class_exists('FikenSale')) {
             if (FikenUtils::SKIP_EMPTY_PRICE && isset($lines)) {
                 $sl = array();
                 foreach ($lines as $line) {
-                    if (intval($line['netPrice']) === 0) {
+                    // Compare in øre: intval() would also drop lines under 1 kr (e.g. a 0.50 kr fee).
+                    if (FikenUtils::moneyToCent($line['netPrice']) == 0) {
                         $resStatus = FikenUtils::EMPTY_PRICE_PARTIAL_ERROR_CODE;
                     } else {
                         $sl[] = $line;
