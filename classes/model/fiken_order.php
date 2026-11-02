@@ -156,7 +156,8 @@ if (!class_exists('FikenOrder')) {
                 " ORDER BY foh.`id_history` ";
 
             $result = $wpdb->get_results($sql, ARRAY_A);
-            if (count($result)) {
+            if (is_array($result) && count($result)) {
+                $res = array(); // appending to false is deprecated since PHP 8.1
                 foreach ($result as $item) {
                     $res[] = new FikenOrder($item['id_order'], $item['id_state'], $item['mes'], $item['state_name'], $item['last_update']);
                 }
@@ -217,7 +218,7 @@ if (!class_exists('FikenOrder')) {
                 $sql .= " AND DATE(posts.`post_date`) >= '" . $wpdb->_escape($data['filter_date_start']) . "'";
             }
             if (isset($data['filter_date_end']) && $data['filter_date_end']) {
-                $sql .= " AND DATE(posts.`post_modified`) <= '" . $wpdb->_escape($data['filter_date_end']) . "'";
+                $sql .= " AND DATE(posts.`post_date`) <= '" . $wpdb->_escape($data['filter_date_end']) . "'";
             }
 
             if (isset($data['filter_order_status_id']) && $data['filter_order_status_id']) {
@@ -272,7 +273,7 @@ if (!class_exists('FikenOrder')) {
                 $sql .= " AND DATE(posts.`post_date`) >= '" . $wpdb->_escape($data['filter_date_start']) . "'";
             }
             if (isset($data['filter_date_end']) && $data['filter_date_end']) {
-                $sql .= " AND DATE(posts.`post_modified`) <= '" . $wpdb->_escape($data['filter_date_end']) . "'";
+                $sql .= " AND DATE(posts.`post_date`) <= '" . $wpdb->_escape($data['filter_date_end']) . "'";
             }
 
             if (isset($data['filter_order_status_id']) && $data['filter_order_status_id']) {

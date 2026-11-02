@@ -6,7 +6,7 @@ if (!class_exists('FikenUtils')) {
 
     class FikenUtils
     {
-        const FIKEN_VERSION = "1.17-MB-3";
+        const FIKEN_VERSION = "1.17-MB-4";
 
         const ACC_FILTER = "/^19[26]0:/";
         const FIKEN_BASE_URL = "https://fiken.no/api/v1";
@@ -178,6 +178,35 @@ if (!class_exists('FikenUtils')) {
                 }
             }
             return $res;
+        }
+
+        /**
+         * A billing field of a WooCommerce order (e.g. 'email', 'first_name').
+         * Uses the WooCommerce 3.0+ getter; direct property access is deprecated.
+         */
+        public static function orderBilling($order, $field)
+        {
+            $getter = 'get_billing_' . $field;
+            if (is_object($order) && method_exists($order, $getter)) {
+                return (string)$order->$getter();
+            }
+            $prop = 'billing_' . $field;
+            return isset($order->$prop) ? (string)$order->$prop : '';
+        }
+
+        /**
+         * A Norwegian organisation number (9 digits, spaces allowed) or '' if $value is not one.
+         * Customers often type their company *name* into the company field; that must not be
+         * sent to Fiken as an organisation number.
+         */
+        public static function normalizeOrgNumber($value)
+        {
+            $value = trim((string)$value);
+            if (!preg_match('/^[\d ]+$/', $value)) {
+                return '';
+            }
+            $digits = str_replace(' ', '', $value);
+            return strlen($digits) === 9 ? $digits : '';
         }
 
         public static function moneyToCent($value)

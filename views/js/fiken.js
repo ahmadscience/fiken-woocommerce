@@ -114,6 +114,17 @@ function setSelectColor() {
     })
 }
 
+// Text from the server (Fiken error messages, order notes) must never be inserted as HTML.
+function escapeHtml(value) {
+    return String(value == null ? '' : value)
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;')
+        .replace(/'/g, '&#39;');
+}
+
+// mes is HTML: callers escape any server text in it with escapeHtml().
 function showAlert(type, mes) {
     jQuery('.alert-danger').hide('fast');
     jQuery('.alert-success').hide('fast');
@@ -181,6 +192,24 @@ function filter() {
 }
 
 
+// Show an order's new Fiken state in its row (text via .text(), so never parsed as HTML).
+function updateOrderRow(orderId, order) {
+    jQuery('#order_id_' + orderId + ' .txtStatus').text(order.stateName);
+    jQuery('#order_id_' + orderId + ' .txtStatus').data('status-id', order.currentState);
+
+    switch (order.currentState) {
+        case '2' :
+            jQuery('#order_id_' + orderId).css('color', 'green');
+            break;
+        case '3' :
+            jQuery('#order_id_' + orderId).css('color', 'red');
+            break;
+        default :
+            jQuery('#order_id_' + orderId).css('color', '');
+    }
+}
+
+
 function regOrder(orderId, force) {
     jQuery('.alert-danger').hide('fast');
     jQuery('.alert-success').hide('fast');
@@ -214,24 +243,14 @@ function regOrder(orderId, force) {
                 return;
             }
             if (data.error) {
-                showAlert(1, data.error);
+                showAlert(1, escapeHtml(data.error));
             }
             else {
-                showAlert(0, data.success);
+                showAlert(0, escapeHtml(data.success));
             }
 
-            jQuery('#order_id_' + orderId + ' .txtStatus').text(data.order.stateName);
-            jQuery('#order_id_' + orderId + ' .txtStatus').data('status-id', data.order.currentState);
-
-            switch (data.order.currentState) {
-                case '2' :
-                    jQuery('#order_id_' + orderId).css('color', 'green');
-                    break;
-                case '3' :
-                    jQuery('#order_id_' + orderId).css('color', 'red');
-                    break;
-                default :
-                    jQuery('#order_id_' + orderId).css('color', '');
+            if (data.order) {
+                updateOrderRow(orderId, data.order);
             }
         }
     });
@@ -250,7 +269,7 @@ function regOrderMass() {
     })
 
     if (!arrIds.length) {
-        showAlert(1, admin_fiken_err_nothing_selected);
+        showAlert(1, escapeHtml(admin_fiken_err_nothing_selected));
         return;
     }
 
@@ -282,28 +301,18 @@ function regOrderMass() {
                         jQuery('#order_id_' + orderId + ' .reg_order').removeAttr('disabled');
                     },
                     error: function (xhr, ajaxOptions, thrownError) {
-                        errMes += '<li> ID: ' + orderId + ' : TECHNICAL ERROR. Details: ' + ajaxOptions + '</li>';
+                        errMes += '<li> ID: ' + escapeHtml(orderId) + ' : TECHNICAL ERROR. Details: ' + escapeHtml(ajaxOptions) + '</li>';
                     },
                     success: function (data) {
                         if (data == undefined) {
-                            errMes += '<li> ID: ' + orderId + ' : TECHNICAL ERROR: data is null </li>';
+                            errMes += '<li> ID: ' + escapeHtml(orderId) + ' : TECHNICAL ERROR: data is null </li>';
                         } else {
                             if (data.error) {
-                                errMes += '<li>ID: ' + orderId + ' : ' + data.error + '</li>';
+                                errMes += '<li>ID: ' + escapeHtml(orderId) + ' : ' + escapeHtml(data.error) + '</li>';
                             }
 
-                            jQuery('#order_id_' + orderId + ' .txtStatus').text(data.order.stateName);
-                            jQuery('#order_id_' + orderId + ' .txtStatus').data('status-id', data.order.currentState);
-
-                            switch (data.order.currentState) {
-                                case '2' :
-                                    jQuery('#order_id_' + orderId).css('color', 'green');
-                                    break;
-                                case '3' :
-                                    jQuery('#order_id_' + orderId).css('color', 'red');
-                                    break;
-                                default :
-                                    jQuery('#order_id_' + orderId).css('color', '');
+                            if (data.order) {
+                                updateOrderRow(orderId, data.order);
                             }
                         }
                     }
@@ -318,7 +327,7 @@ function regOrderMass() {
         if (errMes != '') {
             showAlert(1, '<ul>' + errMes + '</ul>')
         } else {
-            showAlert(0, admin_fiken_order_register_success_mass);
+            showAlert(0, escapeHtml(admin_fiken_order_register_success_mass));
         }
     });
 }
@@ -355,7 +364,7 @@ function view_status_history(orderId) {
             }
 
             if (data.error) {
-                showAlert(1, data.error);
+                showAlert(1, escapeHtml(data.error));
             }
             else {
                 jQuery('tr#status_history_' + orderId).find('table > tbody').html('');
@@ -372,9 +381,9 @@ function view_status_history(orderId) {
                                 color = 'style = "color:red"'
                                 break;
                         }
-                        newRows += '<tr ' + color + '><td class="text-left">' + item.stateName + '</td>' +
-                        '<td class="text-left">' + item.lastUpdate + '</td>' +
-                        '<td class="text-left">' + (item.mes != null ? item.mes : '') + '</td></tr>';
+                        newRows += '<tr ' + color + '><td class="text-left">' + escapeHtml(item.stateName) + '</td>' +
+                        '<td class="text-left">' + escapeHtml(item.lastUpdate) + '</td>' +
+                        '<td class="text-left">' + escapeHtml(item.mes) + '</td></tr>';
                     });
                     jQuery('tr#status_history_' + orderId).find('table > tbody').html(newRows);
                     jQuery('tr#status_history_' + orderId).fadeIn('slow');

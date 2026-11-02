@@ -327,7 +327,7 @@ if (!class_exists('FikenSale')) {
         {
             try {
                 /***  @var $order OrderCore */
-                $order = new  WC_Order($order_id);
+                $order = function_exists('wc_get_order') ? wc_get_order($order_id) : new WC_Order($order_id);
                 if (!$order) {
                     throw new Exception(sprintf(__('Order id: %s not found!', 'fiken'), $order_id));
                 }
@@ -372,7 +372,7 @@ if (!class_exists('FikenSale')) {
                 $status = isset($payMethodSettings->{$payM}->{FikenUtils::CTRL_NAME_PAY_STATUS}) ? $payMethodSettings->{$payM}->{FikenUtils::CTRL_NAME_PAY_STATUS} : false;
 
                 if (!$status) {
-                    throw new Exception(sprintf(__('Order status for payment module "%s" not set!', 'fiken'), $order->module));
+                    throw new Exception(sprintf(__('Order status for payment module "%s" not set!', 'fiken'), $payM));
                 }
 
                 if ($status === $wcOrderPostStatus) {
@@ -575,7 +575,7 @@ if (!class_exists('FikenSale')) {
                 }
                 $lines = $sl;
                 if (!isset($lines) || !$lines) {
-                    throw new Exception(__('Can not register order id: ' . $wcOrderId . '( "amount=0") ', 'fiken'), FikenUtils::EMPTY_PRICE_ERROR_CODE);
+                    throw new Exception(sprintf(__('Can not register order id: %s ("amount=0")', 'fiken'), $wcOrderId), FikenUtils::EMPTY_PRICE_ERROR_CODE);
                 }
             }
 
@@ -648,7 +648,7 @@ if (!class_exists('FikenSale')) {
                 }
 
                 /** @var $fikenCustomer FikenCustomer */
-                $fikenCustomer = FikenCustomer::getCustomerFromFiken($order->billing_email, $company);
+                $fikenCustomer = FikenCustomer::getCustomerFromFiken(FikenUtils::orderBilling($order, 'email'), $company);
                 if ($fikenCustomer) {
                     $sale->setRelCustomer($fikenCustomer->getRelSelf());
                 } else {
@@ -669,7 +669,7 @@ if (!class_exists('FikenSale')) {
             $err = '';
             $resNewSale = FikenUtils::call($company->getRelSales(), $sale->asArray(), true, null, null, $err);
             if ($resNewSale === false) {
-                throw new Exception(__('Can not register order id: ' . $wcOrderId . ' ::  ' . $err, 'fiken'));
+                throw new Exception(sprintf(__('Can not register order id: %s :: %s', 'fiken'), $wcOrderId, $err));
             } else {
                 return $resNewSale['location'];
             }
