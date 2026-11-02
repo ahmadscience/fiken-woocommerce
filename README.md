@@ -2,6 +2,8 @@
 
 Sends paid WooCommerce orders to [Fiken](https://fiken.no) as sales, with a PDF invoice attached.
 
+See [CHANGELOG.md](CHANGELOG.md) for what changed in each version and what to check when updating.
+
 ## Requirements
 
 - WordPress with WooCommerce 3.0 or newer
